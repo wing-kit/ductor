@@ -1379,25 +1379,32 @@ class TelegramBot:
         """Fetch and display changelog for ``upg:cl:<version>``."""
         from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-        from ductor_bot.infra.version import fetch_changelog
+        from ductor_bot.infra.version import _parse_version, fetch_changelog
 
         version = data.split(":", 2)[2] if data.count(":") >= 2 else ""
         if not version:
             return
 
-        # Keep the original message but remove only the changelog button,
-        # preserving "Upgrade now" / "Later" so the user can still act.
-        upgrade_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="Upgrade now",
-                        callback_data=f"upg:yes:{version}",
-                    ),
-                    InlineKeyboardButton(text="Later", callback_data="upg:no"),
+        # Only show upgrade buttons when the changelog version is newer than installed
+        current = get_current_version()
+        is_upgrade = _parse_version(version) > _parse_version(current)
+
+        if is_upgrade:
+            upgrade_keyboard: InlineKeyboardMarkup | None = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Upgrade now",
+                            callback_data=f"upg:yes:{version}",
+                        ),
+                        InlineKeyboardButton(text="Later", callback_data="upg:no"),
+                    ],
                 ],
-            ],
-        )
+            )
+        else:
+            upgrade_keyboard = None
+
+        # Update the original message: keep upgrade buttons if applicable, else remove all
         with contextlib.suppress(TelegramBadRequest):
             await self._bot.edit_message_reply_markup(
                 chat_id=chat_id, message_id=message_id, reply_markup=upgrade_keyboard
@@ -1413,18 +1420,6 @@ class TelegramBot:
             )
             return
 
-        # Send changelog with "Upgrade now" button underneath
-        changelog_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="Upgrade now",
-                        callback_data=f"upg:yes:{version}",
-                    ),
-                    InlineKeyboardButton(text="Later", callback_data="upg:no"),
-                ],
-            ],
-        )
         roots = self._file_roots(self._orch.paths)
         await send_rich(
             self._bot,
@@ -1432,7 +1427,7 @@ class TelegramBot:
             f"**Changelog v{version}**\n\n{body}",
             SendRichOpts(
                 allowed_roots=roots,
-                reply_markup=changelog_keyboard,
+                reply_markup=upgrade_keyboard,
                 thread_id=thread_id,
             ),
         )
