@@ -32,7 +32,9 @@ def _make_orchestrator(
         cache.models = codex_models
         codex_obs = MagicMock()
         codex_obs.get_cache.return_value = cache
-    orch._codex_cache_observer = codex_obs
+    observers = MagicMock()
+    observers.codex_cache_obs = codex_obs
+    orch._observers = observers
 
     return orch
 

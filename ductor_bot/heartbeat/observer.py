@@ -6,13 +6,11 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ductor_bot.config import resolve_user_timezone
 from ductor_bot.infra.base_observer import BaseObserver
 from ductor_bot.log_context import set_log_context
-from ductor_bot.utils.quiet_hours import is_quiet_hour
+from ductor_bot.utils.quiet_hours import check_quiet_hour
 
 if TYPE_CHECKING:
     from ductor_bot.config import AgentConfig, HeartbeatConfig
@@ -127,9 +125,14 @@ class HeartbeatObserver(BaseObserver):
             except Exception:
                 logger.exception("Stale process cleanup failed")
 
-        tz = resolve_user_timezone(self._config.user_timezone)
-        now_hour = datetime.now(tz).hour
-        if is_quiet_hour(now_hour, self._hb.quiet_start, self._hb.quiet_end):
+        is_quiet, now_hour, tz = check_quiet_hour(
+            quiet_start=self._hb.quiet_start,
+            quiet_end=self._hb.quiet_end,
+            user_timezone=self._config.user_timezone,
+            global_quiet_start=self._hb.quiet_start,
+            global_quiet_end=self._hb.quiet_end,
+        )
+        if is_quiet:
             logger.debug("Heartbeat skipped: quiet hours (%d:00 %s)", now_hour, tz.key)
             return
 

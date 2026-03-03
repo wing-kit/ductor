@@ -5,35 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import shutil
-import tempfile
 from pathlib import Path
 
+from ductor_bot.infra.atomic_io import atomic_text_save
 from ductor_bot.workspace.cron_tasks import ensure_task_rule_files
 from ductor_bot.workspace.paths import DuctorPaths
 from ductor_bot.workspace.rules_selector import RulesSelector
 from ductor_bot.workspace.skill_sync import sync_bundled_skills, sync_skills
 
 logger = logging.getLogger(__name__)
-
-
-def _write_atomic(path: Path, content: str) -> None:
-    """Write *content* to *path* atomically using a temp file + rename."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_str = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    tmp = Path(tmp_str)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-        tmp.replace(path)
-    except BaseException:
-        import contextlib
-
-        with contextlib.suppress(OSError):
-            os.close(fd)
-        tmp.unlink(missing_ok=True)
-        raise
 
 
 # Files that are ALWAYS overwritten on every start (Zone 2).
@@ -474,7 +455,7 @@ def inject_runtime_environment(
         # Avoid duplicate injection on restart without workspace re-init
         if "## Multi-Agent Identity" in content or "## Runtime Environment" in content:
             continue
-        _write_atomic(target, content + identity_notice + env_notice)
+        atomic_text_save(target, content + identity_notice + env_notice)
     logger.info(
         "Runtime environment injected: %s agent=%s",
         "docker" if docker_container else "host",

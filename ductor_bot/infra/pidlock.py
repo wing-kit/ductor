@@ -8,6 +8,7 @@ import os
 import time
 from pathlib import Path
 
+from ductor_bot.infra.atomic_io import atomic_bytes_save
 from ductor_bot.infra.process_tree import (
     force_kill_process_tree,
     list_process_descendants,
@@ -123,21 +124,7 @@ def acquire_lock(*, pid_file: Path, kill_existing: bool = False) -> None:
         else:
             logger.warning("Stale PID file found (pid=%s), overwriting", existing_pid)
 
-    # Write atomically: temp file + rename so that a partial write can never
-    # leave a corrupt PID file, and the final rename is atomic on POSIX.
-    import tempfile
-
-    fd, tmp_str = tempfile.mkstemp(dir=str(pid_file.parent), suffix=".tmp")
-    tmp = Path(tmp_str)
-    try:
-        os.write(fd, str(os.getpid()).encode())
-        os.close(fd)
-        tmp.replace(pid_file)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.close(fd)
-        tmp.unlink(missing_ok=True)
-        raise
+    atomic_bytes_save(pid_file, str(os.getpid()).encode())
     logger.info("PID lock acquired (pid=%d)", os.getpid())
 
 

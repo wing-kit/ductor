@@ -158,7 +158,9 @@ async def model_selector_start(
 
     if len(authed) == 1:
         provider = authed[0]
-        codex_cache = orch._codex_cache_observer.get_cache() if orch._codex_cache_observer else None
+        codex_cache = (
+            orch._observers.codex_cache_obs.get_cache() if orch._observers.codex_cache_obs else None
+        )
         return await _build_model_step(provider, header, codex_cache)
 
     buttons: list[InlineKeyboardButton] = []
@@ -188,7 +190,9 @@ async def handle_model_callback(
     payload = parts[1] if len(parts) > 1 else ""
     extra = parts[2] if len(parts) > 2 else ""
 
-    codex_cache = orch._codex_cache_observer.get_cache() if orch._codex_cache_observer else None
+    codex_cache = (
+        orch._observers.codex_cache_obs.get_cache() if orch._observers.codex_cache_obs else None
+    )
 
     if action == "p":
         return await _build_model_step(payload, await _status_line(orch, chat_id), codex_cache)

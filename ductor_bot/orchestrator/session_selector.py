@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from ductor_bot.orchestrator.selector_utils import format_age
 from ductor_bot.text.response_format import SEP, fmt
 
 if TYPE_CHECKING:
@@ -86,7 +87,7 @@ def _build_page(
     for idx, ns in enumerate(sessions, 1):
         status_label = ns.status
         age_seconds = now - ns.created_at
-        age = _format_age(age_seconds)
+        age = format_age(age_seconds)
         provider_label = ns.provider
         msgs = f"{ns.message_count} msg" if ns.message_count == 1 else f"{ns.message_count} msgs"
         lines.append(
@@ -122,14 +123,3 @@ def _build_page(
         "Follow up: `@<name> <message>`",
     )
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def _format_age(seconds: float) -> str:
-    """Format age as a human-readable short string."""
-    if seconds < 60:
-        return f"{int(seconds)}s"
-    if seconds < 3600:
-        return f"{int(seconds / 60)}m"
-    if seconds < 86400:
-        return f"{int(seconds / 3600)}h"
-    return f"{int(seconds / 86400)}d"

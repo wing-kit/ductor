@@ -42,7 +42,7 @@ async def test_orchestrator_starts_cache_observer(mock_codex_cache: CodexModelCa
     mock_config = AgentConfig()
 
     with (
-        patch("ductor_bot.orchestrator.core.CodexCacheObserver", return_value=mock_observer),
+        patch("ductor_bot.orchestrator.observers.CodexCacheObserver", return_value=mock_observer),
         patch("ductor_bot.orchestrator.core.resolve_paths"),
         patch("ductor_bot.orchestrator.core.inject_runtime_environment"),
         patch("ductor_bot.cli.auth.check_all_auth", return_value={}),
@@ -80,9 +80,11 @@ async def test_orchestrator_passes_cache_to_observers(
     mock_config = AgentConfig()
 
     with (
-        patch("ductor_bot.orchestrator.core.CodexCacheObserver", return_value=mock_cache_observer),
-        patch("ductor_bot.orchestrator.core.CronObserver", mock_cron_class),
-        patch("ductor_bot.orchestrator.core.WebhookObserver", mock_webhook_class),
+        patch(
+            "ductor_bot.orchestrator.observers.CodexCacheObserver", return_value=mock_cache_observer
+        ),
+        patch("ductor_bot.orchestrator.observers.CronObserver", mock_cron_class),
+        patch("ductor_bot.orchestrator.observers.WebhookObserver", mock_webhook_class),
         patch("ductor_bot.orchestrator.core.resolve_paths"),
         patch("ductor_bot.orchestrator.core.inject_runtime_environment"),
         patch("ductor_bot.cli.auth.check_all_auth", return_value={}),
@@ -120,7 +122,7 @@ async def test_orchestrator_stops_cache_observer(mock_codex_cache: CodexModelCac
     mock_config = AgentConfig()
 
     with (
-        patch("ductor_bot.orchestrator.core.CodexCacheObserver", return_value=mock_observer),
+        patch("ductor_bot.orchestrator.observers.CodexCacheObserver", return_value=mock_observer),
         patch("ductor_bot.orchestrator.core.resolve_paths"),
         patch("ductor_bot.orchestrator.core.inject_runtime_environment"),
         patch("ductor_bot.cli.auth.check_all_auth", return_value={}),

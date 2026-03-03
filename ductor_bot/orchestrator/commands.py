@@ -179,9 +179,9 @@ async def cmd_upgrade(_orch: Orchestrator, _chat_id: int, _text: str) -> Orchest
 
 def _build_codex_cache_block(orch: Orchestrator) -> str:
     """Build the Codex model cache section for /diagnose."""
-    if not orch._codex_cache_observer:
+    if not orch._observers.codex_cache_obs:
         return "\n🔄 Codex Model Cache: Observer not initialized"
-    cache = orch._codex_cache_observer.get_cache()
+    cache = orch._observers.codex_cache_obs.get_cache()
     if not cache or not cache.models:
         return "\n🔄 Codex Model Cache: Not loaded"
     default_model = next((m.id for m in cache.models if m.is_default), "N/A")

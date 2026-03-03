@@ -14,11 +14,10 @@ from cronsim import CronSim, CronSimError
 
 from ductor_bot.cli.param_resolver import TaskOverrides
 from ductor_bot.config import resolve_user_timezone
-from ductor_bot.cron.execution import enrich_instruction
 from ductor_bot.cron.manager import CronManager
 from ductor_bot.infra.base_task_observer import BaseTaskObserver
 from ductor_bot.infra.file_watcher import FileWatcher
-from ductor_bot.infra.task_runner import check_folder, run_oneshot_task
+from ductor_bot.infra.task_runner import execute_in_task_folder
 from ductor_bot.log_context import set_log_context
 from ductor_bot.utils.quiet_hours import check_quiet_hour
 
@@ -279,93 +278,64 @@ class CronObserver(BaseTaskObserver):
         job = self._manager.get_job(job_id)
         job_title = job.title if job else job_id
 
-        # Acquire dependency lock (if needed)
-        from ductor_bot.cron.dependency_queue import get_dependency_queue
+        if self._is_quiet_hours(job, job_title):
+            return
 
-        dep_queue = get_dependency_queue()
-        dependency = job.dependency if job else None
+        logger.info("Cron job starting job=%s", job_title)
+        t0 = time.monotonic()
 
-        async with dep_queue.acquire(job_id, job_title, dependency):
-            logger.info("Cron job starting job=%s", job_title)
+        overrides = TaskOverrides(
+            provider=job.provider if job else None,
+            model=job.model if job else None,
+            reasoning_effort=job.reasoning_effort if job else None,
+            cli_parameters=job.cli_parameters if job else [],
+        )
 
-            if self._is_quiet_hours(job, job_title):
-                return
+        result = await execute_in_task_folder(
+            self,
+            cron_tasks_dir=self._paths.cron_tasks_dir,
+            task_folder=task_folder,
+            instruction=instruction,
+            overrides=overrides,
+            dependency=job.dependency if job else None,
+            task_id=job_id,
+            task_label="Cron job",
+            timeout_seconds=self._config.cli_timeout,
+        )
 
-            t0 = time.monotonic()
+        if result.status == "error:folder_missing":
+            logger.error("Cron task folder missing: %s", task_folder)
+            self._manager.update_run_status(job_id, status="error:folder_missing")
+            return
 
-            folder = self._paths.cron_tasks_dir / task_folder
-            if not await check_folder(folder):
-                logger.error("Cron task folder missing: %s", folder)
-                self._manager.update_run_status(job_id, status="error:folder_missing")
-                return
-
-            overrides = TaskOverrides(
-                provider=job.provider if job else None,
-                model=job.model if job else None,
-                reasoning_effort=job.reasoning_effort if job else None,
-                cli_parameters=job.cli_parameters if job else [],
-            )
-            exec_config = self.resolve_execution_config(overrides)
-            enriched = enrich_instruction(instruction, task_folder)
-
-            logger.debug(
-                "Cron subprocess cwd=%s provider=%s model=%s timeout=%.0fs",
-                folder,
-                exec_config.provider,
-                exec_config.model,
-                self._config.cli_timeout,
-            )
-
-            try:
-                result = await run_oneshot_task(
-                    exec_config,
-                    enriched,
-                    cwd=folder,
-                    timeout_seconds=self._config.cli_timeout,
-                    timeout_label="Cron job",
-                )
-            except asyncio.CancelledError:
-                logger.warning("Cron job %s cancelled during subprocess", job_id)
-                raise
-
-            logger.info(
-                "Cron subprocess returned job=%s status=%s has_execution=%s",
-                job_id,
-                result.status,
-                result.execution is not None,
-            )
-
-            if result.execution is None:
-                # CLI not found — deliver error to chat, then persist status
-                logger.error("%s CLI not found for cron job %s", exec_config.provider, job_id)
-                await self._deliver_result(job_id, job_title, result.result_text, result.status)
-                self._manager.update_run_status(job_id, status=result.status)
-                return
-
-            self.log_execution_result(result, "Cron job", job_id)
-
-            elapsed_ms = (time.monotonic() - t0) * 1000
-            logger.info(
-                "Cron job completed job=%s status=%s duration_ms=%.0f stdout=%d result=%d",
-                job_title,
-                result.status,
-                elapsed_ms,
-                len(result.execution.stdout),
-                len(result.result_text),
-            )
-
-            # Deliver result BEFORE writing run-status to disk.  The file
-            # write can trigger the file-watcher which reschedules (and
-            # cancels) running tasks.  Delivering first guarantees the
-            # Telegram message is sent even if the task is cancelled during
-            # the subsequent file I/O.
+        if result.execution is None:
+            logger.error("CLI not found for cron job %s", job_id)
             await self._deliver_result(job_id, job_title, result.result_text, result.status)
-
             self._manager.update_run_status(job_id, status=result.status)
-            # Refresh our mtime baseline so the file-watcher doesn't treat the
-            # run-status write as a user-initiated change and trigger a full
-            # reschedule of all other jobs.
-            await self._watcher.update_mtime()
+            return
+
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        logger.info(
+            "Cron job completed job=%s status=%s duration_ms=%.0f stdout=%d result=%d",
+            job_title,
+            result.status,
+            elapsed_ms,
+            len(result.execution.stdout),
+            len(result.result_text),
+        )
+
+        # Deliver result BEFORE writing run-status to disk.  The file
+        # write can trigger the file-watcher which reschedules (and
+        # cancels) running tasks.  Delivering first guarantees the
+        # Telegram message is sent even if the task is cancelled during
+        # the subsequent file I/O.
+        await self._deliver_result(job_id, job_title, result.result_text, result.status)
+
+        self._manager.update_run_status(job_id, status=result.status)
+        # Refresh our mtime baseline so the file-watcher doesn't treat the
+        # run-status write as a user-initiated change and trigger a full
+        # reschedule of all other jobs.
+        await self._watcher.update_mtime()
 
     def _is_quiet_hours(self, job: CronJob | None, job_title: str) -> bool:
         """Return True when the job must be skipped due to quiet-hour settings."""

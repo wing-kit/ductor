@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import html as html_mod
 import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -18,6 +17,11 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import BotCommand, FSInputFile, ReplyParameters
 
 from ductor_bot.background import BackgroundResult
+from ductor_bot.bot.callbacks import (
+    edit_selector_result,
+    mark_button_choice,
+    parse_ns_callback,
+)
 from ductor_bot.bot.file_browser import (
     file_browser_start,
     handle_file_browser_callback,
@@ -745,23 +749,12 @@ class TelegramBot:
         return False
 
     async def _handle_model_selector(self, chat_id: int, message_id: int, data: str) -> None:
-        """Handle model selector wizard by editing the message in-place.
-
-        Acquires the per-chat lock so model switches are atomic with respect
-        to active CLI calls and webhook wake dispatch.
-        """
+        """Handle model selector wizard by editing the message in-place."""
         from ductor_bot.orchestrator.model_selector import handle_model_callback
 
         async with self._sequential.get_lock(chat_id):
             text, keyboard = await handle_model_callback(self._orch, chat_id, data)
-        with contextlib.suppress(TelegramBadRequest):
-            await self._bot.edit_message_text(
-                text=markdown_to_telegram_html(text),
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
+        await edit_selector_result(self._bot, chat_id, message_id, text, keyboard)
 
     async def _handle_cron_selector(self, chat_id: int, message_id: int, data: str) -> None:
         """Handle cron selector wizard by editing the message in-place."""
@@ -769,14 +762,7 @@ class TelegramBot:
 
         async with self._sequential.get_lock(chat_id):
             text, keyboard = await handle_cron_callback(self._orch, data)
-        with contextlib.suppress(TelegramBadRequest):
-            await self._bot.edit_message_text(
-                text=markdown_to_telegram_html(text),
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
+        await edit_selector_result(self._bot, chat_id, message_id, text, keyboard)
 
     async def _handle_session_selector(self, chat_id: int, message_id: int, data: str) -> None:
         """Handle session selector wizard by editing the message in-place."""
@@ -784,14 +770,7 @@ class TelegramBot:
 
         async with self._sequential.get_lock(chat_id):
             text, keyboard = await handle_session_callback(self._orch, chat_id, data)
-        with contextlib.suppress(TelegramBadRequest):
-            await self._bot.edit_message_text(
-                text=markdown_to_telegram_html(text),
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
+        await edit_selector_result(self._bot, chat_id, message_id, text, keyboard)
 
     async def _handle_task_selector(self, chat_id: int, message_id: int, data: str) -> None:
         """Handle task selector wizard by editing the message in-place."""
@@ -801,86 +780,37 @@ class TelegramBot:
         if hub is None:
             return
         text, keyboard = await handle_task_callback(hub, chat_id, data)
-        with contextlib.suppress(TelegramBadRequest):
-            await self._bot.edit_message_text(
-                text=markdown_to_telegram_html(text),
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=keyboard,
-                parse_mode=ParseMode.HTML,
-            )
+        await edit_selector_result(self._bot, chat_id, message_id, text, keyboard)
 
     async def _handle_ns_callback(
         self, chat_id: int, data: str, *, thread_id: int | None = None
     ) -> None:
-        """Handle ``ns:<session_name>:<label>`` button callbacks from session results.
-
-        Routes the button label as a foreground follow-up to the named session.
-        """
-        # Parse: ns:<session_name>:<label>
-        rest = data[3:]  # strip "ns:"
-        colon = rest.find(":")
-        if colon < 0:
+        """Handle ``ns:<session_name>:<label>`` button callbacks from session results."""
+        parsed = parse_ns_callback(data)
+        if parsed is None:
             return
-        session_name = rest[:colon]
-        label = rest[colon + 1 :]
-        if not session_name or not label:
-            return
+        session_name, label = parsed
 
         async with self._sequential.get_lock(chat_id):
             if self._config.streaming.enabled:
-                await self._handle_streaming_ns(chat_id, session_name, label, thread_id=thread_id)
+                from ductor_bot.orchestrator.flows import named_session_streaming
+
+                result = await named_session_streaming(self._orch, chat_id, session_name, label)
             else:
-                await self._handle_non_streaming_ns(
-                    chat_id, session_name, label, thread_id=thread_id
+                from ductor_bot.orchestrator.flows import named_session_flow
+
+                result = await named_session_flow(self._orch, chat_id, session_name, label)
+
+            if result.text:
+                await send_rich(
+                    self._bot,
+                    chat_id,
+                    result.text,
+                    SendRichOpts(
+                        allowed_roots=self.file_roots(self._orch.paths),
+                        thread_id=thread_id,
+                    ),
                 )
-
-    async def _handle_streaming_ns(
-        self,
-        chat_id: int,
-        session_name: str,
-        text: str,
-        *,
-        thread_id: int | None = None,
-    ) -> None:
-        """Stream a named session follow-up from a button click."""
-        from ductor_bot.orchestrator.flows import named_session_streaming
-
-        result = await named_session_streaming(
-            self._orch,
-            chat_id,
-            session_name,
-            text,
-        )
-        if result.text:
-            roots = self.file_roots(self._orch.paths)
-            await send_rich(
-                self._bot,
-                chat_id,
-                result.text,
-                SendRichOpts(allowed_roots=roots, thread_id=thread_id),
-            )
-
-    async def _handle_non_streaming_ns(
-        self,
-        chat_id: int,
-        session_name: str,
-        text: str,
-        *,
-        thread_id: int | None = None,
-    ) -> None:
-        """Non-streaming named session follow-up from a button click."""
-        from ductor_bot.orchestrator.flows import named_session_flow
-
-        result = await named_session_flow(self._orch, chat_id, session_name, text)
-        if result.text:
-            roots = self.file_roots(self._orch.paths)
-            await send_rich(
-                self._bot,
-                chat_id,
-                result.text,
-                SendRichOpts(allowed_roots=roots, thread_id=thread_id),
-            )
 
     async def _handle_file_browser(
         self, chat_id: int, message_id: int, data: str, *, thread_id: int | None = None
@@ -926,34 +856,8 @@ class TelegramBot:
         await self._sequential.cancel_entry(chat_id, entry_id)
 
     async def _mark_button_choice(self, chat_id: int, msg: Message, label: str) -> None:
-        """Edit the bot message to append ``[USER ANSWER] label`` and remove the keyboard.
-
-        Falls back to keyboard-only removal when the message is a caption
-        (photo/video) or the updated text would exceed Telegram limits.
-        """
-        if msg.text is not None:
-            original_html = msg.html_text or msg.text
-            escaped = html_mod.escape(label)
-            updated = f"{original_html}\n\n<i>[USER ANSWER] {escaped}</i>"
-            try:
-                await self._bot.edit_message_text(
-                    text=updated,
-                    chat_id=chat_id,
-                    message_id=msg.message_id,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=None,
-                )
-            except TelegramBadRequest:
-                pass
-            else:
-                return
-
-        with contextlib.suppress(TelegramBadRequest):
-            await self._bot.edit_message_reply_markup(
-                chat_id=chat_id,
-                message_id=msg.message_id,
-                reply_markup=None,
-            )
+        """Edit the bot message to append ``[USER ANSWER] label`` and remove the keyboard."""
+        await mark_button_choice(self._bot, chat_id, msg, label)
 
     # -- Messages --------------------------------------------------------------
 

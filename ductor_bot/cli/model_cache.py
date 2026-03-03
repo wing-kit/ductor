@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Self
 
+from ductor_bot.infra.atomic_io import atomic_text_save
 from ductor_bot.infra.base_observer import BaseObserver
 
 logger = logging.getLogger(__name__)
@@ -116,11 +117,8 @@ class BaseModelCache(ABC):
         )
 
         try:
-            await asyncio.to_thread(cache_path.parent.mkdir, parents=True, exist_ok=True)
-            temp_path = cache_path.with_suffix(".tmp")
             content = json.dumps(cache.to_json(), indent=2)
-            await asyncio.to_thread(temp_path.write_text, content)
-            await asyncio.to_thread(temp_path.replace, cache_path)
+            await asyncio.to_thread(atomic_text_save, cache_path, content)
             logger.debug("Saved %s cache to %s", name, cache_path)
         except Exception:
             logger.exception("Failed to save %s cache to disk", name)

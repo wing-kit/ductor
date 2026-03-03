@@ -186,7 +186,7 @@ async def test_diagnose_shows_cache_status(orch: Orchestrator) -> None:
     # Mock the cache observer
     mock_observer = MagicMock()
     mock_observer.get_cache = MagicMock(return_value=mock_cache)
-    object.__setattr__(orch, "_codex_cache_observer", mock_observer)
+    orch._observers.codex_cache_obs = mock_observer
 
     result = await cmd_diagnose(orch, 0, "/diagnose")
 

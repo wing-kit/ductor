@@ -4,9 +4,20 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any
+
+from ductor_bot._home_defaults.workspace.tools._tool_shared import (
+    available_ids,
+    find_by_id,
+    load_collection_or_default,
+    load_collection_strict,
+    sanitize_name,
+    save_collection,
+)
+
+# Re-export so existing tool scripts keep working with ``from _shared import sanitize_name``
+sanitize_name = sanitize_name
 
 DUCTOR_HOME = Path(os.environ.get("DUCTOR_HOME", "~/.ductor")).expanduser()
 HOOKS_PATH = DUCTOR_HOME / "webhooks.json"
@@ -14,55 +25,29 @@ CONFIG_PATH = DUCTOR_HOME / "config" / "config.json"
 CRON_TASKS_DIR = DUCTOR_HOME / "workspace" / "cron_tasks"
 
 
-def sanitize_name(raw: str) -> str:
-    """Lowercase and normalize a hook name to [a-z0-9-]."""
-    slug = raw.lower()
-    slug = re.sub(r"[^a-z0-9-]", "-", slug)
-    slug = re.sub(r"-{2,}", "-", slug)
-    return slug.strip("-")
-
-
 def load_hooks_or_default(hooks_path: Path) -> dict[str, Any]:
     """Load webhooks JSON or return an empty payload if missing/corrupt."""
-    if not hooks_path.exists():
-        return {"hooks": []}
-    try:
-        data = json.loads(hooks_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"hooks": []}
-    if not isinstance(data, dict):
-        return {"hooks": []}
-    if not isinstance(data.get("hooks"), list):
-        return {"hooks": []}
-    return data
+    return load_collection_or_default(hooks_path, "hooks")
 
 
 def load_hooks_strict(hooks_path: Path) -> dict[str, Any]:
     """Load webhooks JSON and raise on malformed structure."""
-    data = json.loads(hooks_path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or not isinstance(data.get("hooks"), list):
-        msg = "Corrupt webhooks.json -- cannot parse"
-        raise TypeError(msg)
-    return data
+    return load_collection_strict(hooks_path, "hooks")
 
 
 def save_hooks(hooks_path: Path, data: dict[str, Any]) -> None:
     """Persist webhooks JSON with stable formatting."""
-    hooks_path.parent.mkdir(parents=True, exist_ok=True)
-    hooks_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    save_collection(hooks_path, data)
 
 
 def available_hook_ids(hooks: list[dict[str, Any]]) -> list[str]:
     """Return all hook IDs for diagnostics."""
-    return [str(h.get("id", "???")) for h in hooks]
+    return available_ids(hooks)
 
 
 def find_hook(hooks: list[dict[str, Any]], hook_id: str) -> dict[str, Any] | None:
     """Find a hook dict by ID."""
-    return next((h for h in hooks if h.get("id") == hook_id), None)
+    return find_by_id(hooks, hook_id)
 
 
 def load_webhook_config() -> dict[str, Any]:

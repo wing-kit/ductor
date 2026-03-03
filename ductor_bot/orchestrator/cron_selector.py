@@ -174,7 +174,7 @@ async def _build_page(
 
 
 async def _reschedule_now(orch: Orchestrator) -> None:
-    observer = orch._cron_observer
+    observer = orch._observers.cron
     if observer is None:
         return
     request_reschedule = getattr(observer, "request_reschedule", None)

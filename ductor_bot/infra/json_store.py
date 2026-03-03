@@ -6,32 +6,20 @@ and session managers.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
+
+from ductor_bot.infra.atomic_io import atomic_text_save
 
 logger = logging.getLogger(__name__)
 
 
 def atomic_json_save(path: Path, data: dict[str, Any] | list[Any]) -> None:
     """Write JSON atomically using temp file + rename."""
-    path.parent.mkdir(parents=True, exist_ok=True)
     content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    tmp = Path(tmp_path)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-        tmp.replace(path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.close(fd)
-        tmp.unlink(missing_ok=True)
-        raise
+    atomic_text_save(path, content)
 
 
 def load_json(path: Path) -> dict[str, Any] | None:

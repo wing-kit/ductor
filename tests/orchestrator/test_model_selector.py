@@ -65,19 +65,19 @@ def _reset_gemini_models() -> Any:
 
 @contextmanager
 def _with_codex_cache(orch: Orchestrator, models: list[CodexModelInfo] | None = None) -> Any:
-    """Set up a mock _codex_cache_observer with the given models."""
+    """Set up a mock codex_cache_obs on the observer manager."""
     cache = CodexModelCache(
         last_updated=datetime.now(UTC).isoformat(),
         models=models if models is not None else _CODEX_MODELS,
     )
     mock_observer = MagicMock()
     mock_observer.get_cache = MagicMock(return_value=cache)
-    old = getattr(orch, "_codex_cache_observer", None)
-    object.__setattr__(orch, "_codex_cache_observer", mock_observer)
+    old = getattr(orch._observers, "codex_cache_obs", None)
+    orch._observers.codex_cache_obs = mock_observer
     try:
         yield
     finally:
-        object.__setattr__(orch, "_codex_cache_observer", old)
+        orch._observers.codex_cache_obs = old
 
 
 # -- is_model_selector_callback --

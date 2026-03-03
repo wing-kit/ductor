@@ -4,9 +4,20 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any
+
+from ductor_bot._home_defaults.workspace.tools._tool_shared import (
+    available_ids,
+    find_by_id,
+    load_collection_or_default,
+    load_collection_strict,
+    sanitize_name,
+    save_collection,
+)
+
+# Re-export so existing tool scripts keep working with ``from _shared import sanitize_name``
+sanitize_name = sanitize_name
 
 DUCTOR_HOME = Path(os.environ.get("DUCTOR_HOME", "~/.ductor")).expanduser()
 CONFIG_PATH = DUCTOR_HOME / "config" / "config.json"
@@ -26,14 +37,6 @@ def read_user_timezone() -> str:
         return str(data.get("user_timezone", "")).strip()
     except (json.JSONDecodeError, OSError):
         return ""
-
-
-def sanitize_name(raw: str) -> str:
-    """Lowercase and normalize a task name to [a-z0-9-]."""
-    slug = raw.lower()
-    slug = re.sub(r"[^a-z0-9-]", "-", slug)
-    slug = re.sub(r"-{2,}", "-", slug)
-    return slug.strip("-")
 
 
 def detect_rule_filenames() -> list[str]:
@@ -81,31 +84,17 @@ and well-formatted manner.
 
 def load_jobs_or_default(jobs_path: Path) -> dict[str, Any]:
     """Load cron jobs JSON or return an empty payload if missing/corrupt."""
-    if not jobs_path.exists():
-        return {"jobs": []}
-    try:
-        data = json.loads(jobs_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"jobs": []}
-    if not isinstance(data, dict):
-        return {"jobs": []}
-    if not isinstance(data.get("jobs"), list):
-        return {"jobs": []}
-    return data
+    return load_collection_or_default(jobs_path, "jobs")
 
 
 def load_jobs_strict(jobs_path: Path) -> dict[str, Any]:
     """Load cron jobs JSON and raise on malformed structure."""
-    data = json.loads(jobs_path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or not isinstance(data.get("jobs"), list):
-        msg = "Corrupt cron_jobs.json -- cannot parse"
-        raise TypeError(msg)
-    return data
+    return load_collection_strict(jobs_path, "jobs")
 
 
 def find_job_by_id_or_task_folder(jobs: list[dict[str, Any]], job_id: str) -> dict[str, Any] | None:
     """Find a job by exact id, then by task_folder."""
-    exact = next((j for j in jobs if j.get("id") == job_id), None)
+    exact = find_by_id(jobs, job_id)
     if exact:
         return exact
     return next((j for j in jobs if j.get("task_folder") == job_id), None)
@@ -113,7 +102,7 @@ def find_job_by_id_or_task_folder(jobs: list[dict[str, Any]], job_id: str) -> di
 
 def available_job_ids(jobs: list[dict[str, Any]]) -> list[str]:
     """Return all job IDs for diagnostics."""
-    return [str(j.get("id", "???")) for j in jobs]
+    return available_ids(jobs)
 
 
 def safe_task_dir(task_folder: str) -> Path:
@@ -127,8 +116,4 @@ def safe_task_dir(task_folder: str) -> Path:
 
 def save_jobs(jobs_path: Path, data: dict[str, Any]) -> None:
     """Persist cron jobs JSON with stable formatting."""
-    jobs_path.parent.mkdir(parents=True, exist_ok=True)
-    jobs_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    save_collection(jobs_path, data)

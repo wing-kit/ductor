@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
-import os
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from ductor_bot.infra.atomic_io import atomic_bytes_save
 
 logger = logging.getLogger(__name__)
 
@@ -24,24 +23,12 @@ def write_restart_sentinel(
     sentinel_path: Path,
 ) -> None:
     """Write a sentinel file so the bot can notify the user after restart."""
-    sentinel_path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "chat_id": chat_id,
         "message": message,
         "timestamp": datetime.now(UTC).isoformat(),
     }
-    content = json.dumps(data)
-    fd, tmp_str = tempfile.mkstemp(dir=str(sentinel_path.parent), suffix=".tmp")
-    tmp = Path(tmp_str)
-    try:
-        os.write(fd, content.encode())
-        os.close(fd)
-        tmp.replace(sentinel_path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.close(fd)
-        tmp.unlink(missing_ok=True)
-        raise
+    atomic_bytes_save(sentinel_path, json.dumps(data).encode())
     logger.info("Restart sentinel written for chat=%d", chat_id)
 
 

@@ -9,10 +9,9 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from ductor_bot.cli.param_resolver import TaskOverrides
-from ductor_bot.cron.execution import enrich_instruction, indent
 from ductor_bot.infra.base_task_observer import BaseTaskObserver
 from ductor_bot.infra.file_watcher import FileWatcher
-from ductor_bot.infra.task_runner import check_folder, run_oneshot_task
+from ductor_bot.infra.task_runner import execute_in_task_folder
 from ductor_bot.utils.quiet_hours import check_quiet_hour
 from ductor_bot.webhook.models import WebhookResult, render_template
 from ductor_bot.webhook.server import WebhookServer
@@ -286,73 +285,24 @@ class WebhookObserver(BaseTaskObserver):
                 status="skipped:quiet_hours",
             )
 
-        # Acquire dependency lock (if needed)
-        from ductor_bot.cron.dependency_queue import get_dependency_queue
-
-        dep_queue = get_dependency_queue()
         dependency = hook.dependency if hook else None
 
-        async with dep_queue.acquire(hook_id, title, dependency):
-            folder = self._paths.cron_tasks_dir / task_folder
-            if not await check_folder(folder):
-                return WebhookResult(
-                    hook_id=hook_id,
-                    hook_title=title,
-                    mode="cron_task",
-                    result_text="",
-                    status="error:folder_missing",
-                )
+        result = await execute_in_task_folder(
+            self,
+            cron_tasks_dir=self._paths.cron_tasks_dir,
+            task_folder=task_folder,
+            instruction=prompt,
+            overrides=overrides,
+            dependency=dependency,
+            task_id=hook_id,
+            task_label="Webhook cron_task",
+            timeout_seconds=self._config.cli_timeout,
+        )
 
-            exec_config = self.resolve_execution_config(overrides)
-            enriched = enrich_instruction(prompt, task_folder)
-
-            timeout = self._config.cli_timeout
-            logger.info(
-                "--- WEBHOOK CRON_TASK SPAWN ---\n"
-                "  Hook:     %s\n  Folder:   %s\n  Provider: %s\n  Model:    %s\n"
-                "  Timeout:  %.0fs\n  Prompt:\n%s",
-                hook_id,
-                folder,
-                exec_config.provider,
-                exec_config.model,
-                timeout,
-                indent(enriched, "    "),
-            )
-
-            result = await run_oneshot_task(
-                exec_config,
-                enriched,
-                cwd=folder,
-                timeout_seconds=timeout,
-                timeout_label="Webhook cron_task",
-            )
-
-            if result.execution is None:
-                return WebhookResult(
-                    hook_id=hook_id,
-                    hook_title=title,
-                    mode="cron_task",
-                    result_text="",
-                    status=result.status,
-                )
-
-            self.log_execution_result(result, "Webhook cron_task", hook_id)
-
-            logger.info(
-                "--- WEBHOOK CRON_TASK DONE ---\n"
-                "  Hook:     %s\n  Provider: %s\n  Status:   %s\n"
-                "  Stdout:   %d bytes\n  Result:   %d chars",
-                hook_id,
-                exec_config.provider,
-                result.status,
-                len(result.execution.stdout),
-                len(result.result_text),
-            )
-
-            return WebhookResult(
-                hook_id=hook_id,
-                hook_title=title,
-                mode="cron_task",
-                result_text=result.result_text,
-                status=result.status,
-            )
+        return WebhookResult(
+            hook_id=hook_id,
+            hook_title=title,
+            mode="cron_task",
+            result_text=result.result_text,
+            status=result.status,
+        )

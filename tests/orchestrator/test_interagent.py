@@ -10,6 +10,10 @@ from ductor_bot.cli.types import CLIResponse
 from ductor_bot.config import AgentConfig
 from ductor_bot.multiagent.bus import AsyncInterAgentResult
 from ductor_bot.orchestrator.core import Orchestrator
+from ductor_bot.orchestrator.injection import (
+    _get_or_create_interagent_session,
+    _interagent_chat_id,
+)
 from ductor_bot.workspace.paths import DuctorPaths
 
 
@@ -32,20 +36,20 @@ class TestInteragentChatId:
     """Test _interagent_chat_id helper."""
 
     def test_returns_first_allowed_user(self, orch_ia: Orchestrator) -> None:
-        assert orch_ia._interagent_chat_id() == 12345
+        assert _interagent_chat_id(orch_ia) == 12345
 
     def test_returns_zero_when_no_users(self, workspace: tuple[DuctorPaths, AgentConfig]) -> None:
         paths, config = workspace
         config.allowed_user_ids = []
         o = Orchestrator(config, paths)
-        assert o._interagent_chat_id() == 0
+        assert _interagent_chat_id(o) == 0
 
 
 class TestGetOrCreateInteragentSession:
     """Test _get_or_create_interagent_session."""
 
     def test_creates_new_session(self, orch_ia: Orchestrator) -> None:
-        ns, is_new, notice = orch_ia._get_or_create_interagent_session("main")
+        ns, is_new, notice = _get_or_create_interagent_session(orch_ia, "main")
         assert is_new is True
         assert notice == ""
         assert ns.name == "ia-main"
@@ -53,41 +57,41 @@ class TestGetOrCreateInteragentSession:
         assert ns.status == "running"
 
     def test_reuses_existing_session(self, orch_ia: Orchestrator) -> None:
-        ns1, _, _ = orch_ia._get_or_create_interagent_session("main")
+        ns1, _, _ = _get_or_create_interagent_session(orch_ia, "main")
         ns1.status = "idle"
-        ns2, is_new2, notice = orch_ia._get_or_create_interagent_session("main")
+        ns2, is_new2, notice = _get_or_create_interagent_session(orch_ia, "main")
         assert is_new2 is False
         assert notice == ""
         assert ns2.name == ns1.name
 
     def test_new_session_flag_resets_existing(self, orch_ia: Orchestrator) -> None:
-        ns1, _, _ = orch_ia._get_or_create_interagent_session("main")
+        ns1, _, _ = _get_or_create_interagent_session(orch_ia, "main")
         ns1.status = "idle"
         ns1.session_id = "old-session"
 
-        ns2, is_new, _ = orch_ia._get_or_create_interagent_session("main", new_session=True)
+        ns2, is_new, _ = _get_or_create_interagent_session(orch_ia, "main", new_session=True)
         assert is_new is True
         assert ns2.session_id == ""  # Fresh session, no resume ID
 
     def test_different_senders_get_different_sessions(self, orch_ia: Orchestrator) -> None:
-        ns1, _, _ = orch_ia._get_or_create_interagent_session("alice")
-        ns2, _, _ = orch_ia._get_or_create_interagent_session("bob")
+        ns1, _, _ = _get_or_create_interagent_session(orch_ia, "alice")
+        ns2, _, _ = _get_or_create_interagent_session(orch_ia, "bob")
         assert ns1.name == "ia-alice"
         assert ns2.name == "ia-bob"
         assert ns1.name != ns2.name
 
     def test_ended_session_creates_new_one(self, orch_ia: Orchestrator) -> None:
-        ns1, _, _ = orch_ia._get_or_create_interagent_session("main")
+        ns1, _, _ = _get_or_create_interagent_session(orch_ia, "main")
         ns1.status = "ended"
 
-        ns2, is_new, _ = orch_ia._get_or_create_interagent_session("main")
+        ns2, is_new, _ = _get_or_create_interagent_session(orch_ia, "main")
         assert is_new is True
         assert ns2.session_id == ""
 
     def test_provider_switch_resets_session(self, orch_ia: Orchestrator) -> None:
         # Start with a codex model so the session is created for provider "codex"
         orch_ia._config.model = "gpt-5.3-codex"
-        ns1, _, notice1 = orch_ia._get_or_create_interagent_session("main")
+        ns1, _, notice1 = _get_or_create_interagent_session(orch_ia, "main")
         assert notice1 == ""
         assert ns1.provider == "codex"
         ns1.status = "idle"
@@ -96,17 +100,17 @@ class TestGetOrCreateInteragentSession:
         # Switch to a claude model → different provider
         orch_ia._config.model = "sonnet"
 
-        ns2, is_new, notice2 = orch_ia._get_or_create_interagent_session("main")
+        ns2, is_new, notice2 = _get_or_create_interagent_session(orch_ia, "main")
         assert is_new is True
         assert ns2.session_id == ""  # Fresh — old codex session discarded
         assert "provider" in notice2.lower()
         assert ns2.provider == "claude"
 
     def test_same_provider_no_notice(self, orch_ia: Orchestrator) -> None:
-        ns1, _, _ = orch_ia._get_or_create_interagent_session("main")
+        ns1, _, _ = _get_or_create_interagent_session(orch_ia, "main")
         ns1.status = "idle"
 
-        _ns2, is_new, notice = orch_ia._get_or_create_interagent_session("main")
+        _ns2, is_new, notice = _get_or_create_interagent_session(orch_ia, "main")
         assert is_new is False
         assert notice == ""
 

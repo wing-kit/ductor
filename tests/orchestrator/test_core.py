@@ -150,7 +150,7 @@ async def test_create_with_authenticated_provider(
             return_value={"claude": claude_auth, "codex": codex_auth},
         ),
         patch(
-            "ductor_bot.orchestrator.core.watch_rule_files",
+            "ductor_bot.orchestrator.observers.watch_rule_files",
             new_callable=AsyncMock,
         ),
     ):
@@ -176,7 +176,7 @@ async def test_create_no_authenticated_providers(
             return_value={"claude": claude_auth, "codex": codex_auth},
         ),
         patch(
-            "ductor_bot.orchestrator.core.watch_rule_files",
+            "ductor_bot.orchestrator.observers.watch_rule_files",
             new_callable=AsyncMock,
         ),
     ):
@@ -202,7 +202,7 @@ async def test_create_installed_but_not_authenticated(
             return_value={"claude": claude_auth, "codex": codex_auth},
         ),
         patch(
-            "ductor_bot.orchestrator.core.watch_rule_files",
+            "ductor_bot.orchestrator.observers.watch_rule_files",
             new_callable=AsyncMock,
         ),
     ):
@@ -228,7 +228,7 @@ async def test_create_both_providers_authenticated(
             return_value={"claude": claude_auth, "codex": codex_auth},
         ),
         patch(
-            "ductor_bot.orchestrator.core.watch_rule_files",
+            "ductor_bot.orchestrator.observers.watch_rule_files",
             new_callable=AsyncMock,
         ),
     ):
@@ -253,13 +253,13 @@ async def test_create_starts_cron_and_heartbeat(
             return_value={"claude": claude_auth},
         ),
         patch(
-            "ductor_bot.orchestrator.core.watch_rule_files",
+            "ductor_bot.orchestrator.observers.watch_rule_files",
             new_callable=AsyncMock,
         ),
     ):
         result = await Orchestrator.create(config)
 
-    assert result._rule_sync_task is not None
+    assert result._observers._rule_sync_task is not None
 
 
 # ---------------------------------------------------------------------------
@@ -273,27 +273,26 @@ async def test_shutdown_cancels_rule_sync_task(orch: Orchestrator) -> None:
 
     real_task = asyncio.create_task(_noop())
 
-    orch._rule_sync_task = real_task
-    orch._heartbeat = MagicMock()
-    orch._heartbeat.stop = AsyncMock()
-    orch._cron_observer = MagicMock()
-    orch._cron_observer.stop = AsyncMock()
+    orch._observers._rule_sync_task = real_task
+    orch._observers.heartbeat = MagicMock()
+    orch._observers.heartbeat.stop = AsyncMock()
+    orch._observers.cleanup = MagicMock()
+    orch._observers.cleanup.stop = AsyncMock()
 
     await orch.shutdown()
 
     assert real_task.cancelled()
-    orch._heartbeat.stop.assert_awaited_once()
-    orch._cron_observer.stop.assert_awaited_once()
+    orch._observers.heartbeat.stop.assert_awaited_once()
 
 
 async def test_shutdown_kills_active_processes(orch: Orchestrator) -> None:
     kill_all_active = AsyncMock(return_value=1)
     object.__setattr__(orch._process_registry, "kill_all_active", kill_all_active)
 
-    orch._heartbeat = MagicMock()
-    orch._heartbeat.stop = AsyncMock()
-    orch._cron_observer = MagicMock()
-    orch._cron_observer.stop = AsyncMock()
+    orch._observers.heartbeat = MagicMock()
+    orch._observers.heartbeat.stop = AsyncMock()
+    orch._observers.cleanup = MagicMock()
+    orch._observers.cleanup.stop = AsyncMock()
 
     await orch.shutdown()
 
@@ -304,12 +303,12 @@ async def test_shutdown_skips_done_task(orch: Orchestrator) -> None:
     mock_task = MagicMock(spec=asyncio.Task)
     mock_task.done.return_value = True
     mock_task.cancel = MagicMock()
-    orch._rule_sync_task = mock_task
+    orch._observers._rule_sync_task = mock_task
 
-    orch._heartbeat = MagicMock()
-    orch._heartbeat.stop = AsyncMock()
-    orch._cron_observer = MagicMock()
-    orch._cron_observer.stop = AsyncMock()
+    orch._observers.heartbeat = MagicMock()
+    orch._observers.heartbeat.stop = AsyncMock()
+    orch._observers.cleanup = MagicMock()
+    orch._observers.cleanup.stop = AsyncMock()
 
     await orch.shutdown()
 
@@ -317,17 +316,16 @@ async def test_shutdown_skips_done_task(orch: Orchestrator) -> None:
 
 
 async def test_shutdown_no_rule_task(orch: Orchestrator) -> None:
-    orch._rule_sync_task = None
+    orch._observers._rule_sync_task = None
 
-    orch._heartbeat = MagicMock()
-    orch._heartbeat.stop = AsyncMock()
-    orch._cron_observer = MagicMock()
-    orch._cron_observer.stop = AsyncMock()
+    orch._observers.heartbeat = MagicMock()
+    orch._observers.heartbeat.stop = AsyncMock()
+    orch._observers.cleanup = MagicMock()
+    orch._observers.cleanup.stop = AsyncMock()
 
     await orch.shutdown()
 
-    orch._heartbeat.stop.assert_awaited_once()
-    orch._cron_observer.stop.assert_awaited_once()
+    orch._observers.heartbeat.stop.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -453,17 +451,17 @@ async def test_handle_heartbeat_returns_none_on_ack(orch: Orchestrator) -> None:
 
 
 def test_set_cron_result_handler(orch: Orchestrator) -> None:
-    orch._cron_observer = MagicMock()
+    orch._observers.cron = MagicMock()
     handler = AsyncMock()
     orch.set_cron_result_handler(handler)
-    orch._cron_observer.set_result_handler.assert_called_once_with(handler)
+    orch._observers.cron.set_result_handler.assert_called_once_with(handler)
 
 
 def test_set_heartbeat_handler(orch: Orchestrator) -> None:
-    orch._heartbeat = MagicMock()
+    orch._observers.heartbeat = MagicMock()
     handler = AsyncMock()
     orch.set_heartbeat_handler(handler)
-    orch._heartbeat.set_result_handler.assert_called_once_with(handler)
+    orch._observers.heartbeat.set_result_handler.assert_called_once_with(handler)
 
 
 # ---------------------------------------------------------------------------

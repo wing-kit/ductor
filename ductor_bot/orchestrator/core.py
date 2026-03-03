@@ -3,25 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import os
 import secrets
-import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ductor_bot.background import (
-    BackgroundObserver,
     BackgroundResult,
     BackgroundSubmit,
     BackgroundTask,
 )
-from ductor_bot.cleanup import CleanupObserver
-from ductor_bot.cli.codex_cache import CodexModelCache
-from ductor_bot.cli.codex_cache_observer import CodexCacheObserver
-from ductor_bot.cli.gemini_cache_observer import GeminiCacheObserver
 from ductor_bot.cli.process_registry import ProcessRegistry
 from ductor_bot.cli.service import CLIService, CLIServiceConfig
 from ductor_bot.config import (
@@ -32,9 +25,7 @@ from ductor_bot.config import (
     get_gemini_models,
     set_gemini_models,
 )
-from ductor_bot.config_reload import ConfigReloader
 from ductor_bot.cron.manager import CronManager
-from ductor_bot.cron.observer import CronObserver
 from ductor_bot.errors import (
     CLIError,
     CronError,
@@ -44,7 +35,6 @@ from ductor_bot.errors import (
     WorkspaceError,
 )
 from ductor_bot.files.allowed_roots import resolve_allowed_roots
-from ductor_bot.heartbeat import HeartbeatObserver
 from ductor_bot.infra.docker import DockerManager
 from ductor_bot.infra.inflight import InflightTracker
 from ductor_bot.orchestrator.commands import (
@@ -73,29 +63,27 @@ from ductor_bot.orchestrator.hooks import (
     MAINMEMORY_REMINDER,
     MessageHookRegistry,
 )
+from ductor_bot.orchestrator.observers import ObserverManager
 from ductor_bot.orchestrator.registry import CommandRegistry, OrchestratorResult
 from ductor_bot.security import detect_suspicious_patterns
 from ductor_bot.session import SessionManager
-from ductor_bot.session.named import NamedSession, NamedSessionRegistry
+from ductor_bot.session.named import NamedSessionRegistry
 from ductor_bot.webhook.manager import WebhookManager
 from ductor_bot.webhook.models import WebhookResult
-from ductor_bot.webhook.observer import WebhookObserver
-from ductor_bot.workspace.init import (
-    inject_runtime_environment,
-    watch_rule_files,
-)
+from ductor_bot.workspace.init import inject_runtime_environment
 from ductor_bot.workspace.paths import DuctorPaths, resolve_paths
 from ductor_bot.workspace.skill_sync import (
     cleanup_ductor_links,
     sync_bundled_skills,
     sync_skills,
-    watch_skill_sync,
 )
 
 if TYPE_CHECKING:
+    from ductor_bot.background import BackgroundObserver
     from ductor_bot.cli.auth import AuthResult, AuthStatus
     from ductor_bot.multiagent.bus import AsyncInterAgentResult
     from ductor_bot.multiagent.supervisor import AgentSupervisor
+    from ductor_bot.session.named import NamedSession
     from ductor_bot.tasks.hub import TaskHub
     from ductor_bot.tasks.models import TaskResult
 
@@ -187,24 +175,15 @@ class Orchestrator:
             process_registry=self._process_registry,
         )
         self._cron_manager = CronManager(jobs_path=paths.cron_jobs_path)
-        self._cron_observer: CronObserver | None = None  # Created in create() after cache init
-        self._heartbeat = HeartbeatObserver(config)
-        self._heartbeat.set_heartbeat_handler(self.handle_heartbeat)
-        self._heartbeat.set_busy_check(self._process_registry.has_active)
-        stale_max = config.cli_timeout * 2
-        self._heartbeat.set_stale_cleanup(lambda: self._process_registry.kill_stale(stale_max))
         self._webhook_manager = WebhookManager(hooks_path=paths.webhooks_path)
-        self._webhook_observer: WebhookObserver | None = (
-            None  # Created in create() after cache init
+        self._observers = ObserverManager(config, paths)
+        self._observers.heartbeat.set_heartbeat_handler(self.handle_heartbeat)
+        self._observers.heartbeat.set_busy_check(self._process_registry.has_active)
+        stale_max = config.cli_timeout * 2
+        self._observers.heartbeat.set_stale_cleanup(
+            lambda: self._process_registry.kill_stale(stale_max)
         )
-        self._bg_observer: BackgroundObserver | None = None
-        self._codex_cache: CodexModelCache | None = None
         self._api_stop: Callable[[], Awaitable[None]] | None = None
-        self._cleanup_observer = CleanupObserver(config, paths)
-        self._codex_cache_observer: CodexCacheObserver | None = None
-        self._gemini_cache_observer: GeminiCacheObserver | None = None
-        self._rule_sync_task: asyncio.Task[None] | None = None
-        self._skill_sync_task: asyncio.Task[None] | None = None
         self._gemini_api_key_mode: bool | None = None
         self._inflight_tracker = InflightTracker(paths.inflight_turns_path)
         self._hook_registry = MessageHookRegistry()
@@ -215,7 +194,6 @@ class Orchestrator:
         self._task_hub: TaskHub | None = None  # Set by supervisor or __main__.py
         self._command_registry = CommandRegistry()
         self._register_commands()
-        self._config_reloader: ConfigReloader | None = None
 
     @property
     def paths(self) -> DuctorPaths:
@@ -260,7 +238,7 @@ class Orchestrator:
     @property
     def bg_observer(self) -> BackgroundObserver | None:
         """Public access to the background observer."""
-        return self._bg_observer
+        return self._observers.background
 
     @property
     def supervisor(self) -> AgentSupervisor | None:
@@ -329,79 +307,35 @@ class Orchestrator:
 
         await asyncio.to_thread(orch._init_gemini_state)
 
-        safe_codex_cache = await orch._init_model_caches(paths)
-        orch._codex_cache = safe_codex_cache
-        orch._bg_observer = BackgroundObserver(
-            paths, timeout_seconds=config.timeouts.background, cli_service=orch._cli_service
+        codex_cache = await orch._observers.init_model_caches(
+            on_gemini_refresh=orch._on_gemini_models_refresh
         )
-        orch._cron_observer = CronObserver(
-            paths,
-            orch._cron_manager,
-            config=config,
-            codex_cache=safe_codex_cache,
+        orch._observers.init_task_observers(
+            cron_manager=orch._cron_manager,
+            webhook_manager=orch._webhook_manager,
+            cli_service=orch._cli_service,
+            codex_cache=codex_cache,
         )
-        orch._webhook_observer = WebhookObserver(
-            paths,
-            orch._webhook_manager,
-            config=config,
-            codex_cache=safe_codex_cache,
-        )
-
-        await orch._cron_observer.start()
-        await orch._heartbeat.start()
-        await orch._webhook_observer.start()
-        await orch._cleanup_observer.start()
+        await orch._observers.start_all(docker_container=docker_container)
 
         # Direct API server (WebSocket, designed for Tailscale)
         if config.api.enabled:
             await orch._start_api_server(config, paths)
-        orch._rule_sync_task = asyncio.create_task(watch_rule_files(paths.workspace))
-        logger.info("Rule file watcher started (CLAUDE.md <-> AGENTS.md <-> GEMINI.md)")
-        orch._skill_sync_task = asyncio.create_task(
-            watch_skill_sync(paths, docker_active=bool(docker_container))
-        )
-        logger.info("Skill sync watcher started")
 
-        orch._config_reloader = ConfigReloader(
-            paths.config_path,
-            config,
+        await orch._observers.start_config_reloader(
             on_hot_reload=orch._on_config_hot_reload,
             on_restart_needed=lambda fields: logger.warning(
                 "Config changed but requires restart: %s", ", ".join(fields)
             ),
         )
-        await orch._config_reloader.start()
 
         return orch
 
-    async def _init_model_caches(self, paths: DuctorPaths) -> CodexModelCache:
-        """Start Gemini and Codex cache observers, return Codex cache."""
-        # Gemini cache observer
-        gemini_cache_path = paths.config_path.parent / "gemini_models.json"
-
-        def _on_gemini_refresh(models: tuple[str, ...]) -> None:
-            set_gemini_models(frozenset(models))
-            self._refresh_known_model_ids()
-            self._gemini_api_key_mode = None  # Invalidate to re-check on next access
-
-        gemini_observer = GeminiCacheObserver(gemini_cache_path, on_refresh=_on_gemini_refresh)
-        await gemini_observer.start()
-        self._gemini_cache_observer = gemini_observer
-
-        if not get_gemini_models():
-            logger.warning("Gemini cache is empty after startup (Gemini may not be installed)")
-
-        # Codex cache observer
-        codex_cache_path = paths.config_path.parent / "codex_models.json"
-        codex_observer = CodexCacheObserver(codex_cache_path)
-        await codex_observer.start()
-        self._codex_cache_observer = codex_observer
-        codex_cache = codex_observer.get_cache()
-
-        if not codex_cache or not codex_cache.models:
-            logger.warning("Codex cache is empty after startup (Codex may not be authenticated)")
-
-        return codex_cache or CodexModelCache("", [])
+    def _on_gemini_models_refresh(self, models: tuple[str, ...]) -> None:
+        """Callback for GeminiCacheObserver: update model registry."""
+        set_gemini_models(frozenset(models))
+        self._refresh_known_model_ids()
+        self._gemini_api_key_mode = None  # Invalidate to re-check on next access
 
     def _refresh_known_model_ids(self) -> None:
         """Refresh directive-known model IDs from dynamic provider registries."""
@@ -470,7 +404,9 @@ class Orchestrator:
                 models = sorted(gemini) if gemini else sorted(_GEMINI_ALIASES)
             elif pid == "codex":
                 cache = (
-                    self._codex_cache_observer.get_cache() if self._codex_cache_observer else None
+                    self._observers.codex_cache_obs.get_cache()
+                    if self._observers.codex_cache_obs
+                    else None
                 )
                 models = [m.id for m in cache.models] if cache and cache.models else []
             else:
@@ -639,8 +575,8 @@ class Orchestrator:
     async def abort(self, chat_id: int) -> int:
         """Kill all active CLI processes and background tasks for chat_id."""
         killed = await self._process_registry.kill_all(chat_id)
-        if self._bg_observer:
-            killed += await self._bg_observer.cancel_all(chat_id)
+        if self._observers.background:
+            killed += await self._observers.background.cancel_all(chat_id)
         self._named_sessions.end_all(chat_id)
         return killed
 
@@ -654,15 +590,14 @@ class Orchestrator:
         handler: Callable[[str, str, str], Awaitable[None]],
     ) -> None:
         """Forward cron job results to an external handler (e.g. Telegram)."""
-        if self._cron_observer:
-            self._cron_observer.set_result_handler(handler)
+        self._observers.set_cron_result_handler(handler)
 
     def set_heartbeat_handler(
         self,
         handler: Callable[[int, str], Awaitable[None]],
     ) -> None:
         """Forward heartbeat alert messages to an external handler (e.g. Telegram)."""
-        self._heartbeat.set_result_handler(handler)
+        self._observers.set_heartbeat_result_handler(handler)
 
     async def handle_heartbeat(self, chat_id: int) -> str | None:
         """Run a heartbeat turn in the main session. Returns alert text or None."""
@@ -674,24 +609,21 @@ class Orchestrator:
         handler: Callable[[WebhookResult], Awaitable[None]],
     ) -> None:
         """Forward webhook results to an external handler (e.g. Telegram)."""
-        if self._webhook_observer:
-            self._webhook_observer.set_result_handler(handler)
+        self._observers.set_webhook_result_handler(handler)
 
     def set_webhook_wake_handler(
         self,
         handler: Callable[[int, str], Awaitable[str | None]],
     ) -> None:
         """Set the webhook wake handler (provided by the bot layer)."""
-        if self._webhook_observer:
-            self._webhook_observer.set_wake_handler(handler)
+        self._observers.set_webhook_wake_handler(handler)
 
     def set_session_result_handler(
         self,
         handler: Callable[[BackgroundResult], Awaitable[None]],
     ) -> None:
         """Forward background task results to an external handler (e.g. Telegram)."""
-        if self._bg_observer:
-            self._bg_observer.set_result_handler(handler)
+        self._observers.set_session_result_handler(handler)
 
     def submit_background_task(
         self,
@@ -703,14 +635,14 @@ class Orchestrator:
         """Submit a background task using the current provider/model. Returns task_id."""
         from ductor_bot.cli.param_resolver import resolve_cli_config
 
-        if self._bg_observer is None:
+        if self._observers.background is None:
             msg = "Background observer not initialized"
             raise RuntimeError(msg)
-        exec_config = resolve_cli_config(self._config, self._codex_cache)
+        exec_config = resolve_cli_config(self._config, self._observers.codex_cache)
         sub = BackgroundSubmit(
             chat_id=chat_id, prompt=prompt, message_id=message_id, thread_id=thread_id
         )
-        return self._bg_observer.submit(sub, exec_config)
+        return self._observers.background.submit(sub, exec_config)
 
     def submit_named_session(
         self,
@@ -721,7 +653,7 @@ class Orchestrator:
         """Submit a new named background session. Returns (task_id, session_name)."""
         from ductor_bot.cli.param_resolver import resolve_cli_config
 
-        if self._bg_observer is None:
+        if self._observers.background is None:
             msg = "Background observer not initialized"
             raise RuntimeError(msg)
 
@@ -733,7 +665,7 @@ class Orchestrator:
             )
 
         ns = self._named_sessions.create(chat_id, provider_name, model_name, prompt)
-        exec_config = resolve_cli_config(self._config, self._codex_cache)
+        exec_config = resolve_cli_config(self._config, self._observers.codex_cache)
         sub = BackgroundSubmit(
             chat_id=chat_id,
             prompt=prompt,
@@ -743,7 +675,7 @@ class Orchestrator:
             provider_override=provider_name,
             model_override=model_name,
         )
-        task_id = self._bg_observer.submit(sub, exec_config)
+        task_id = self._observers.background.submit(sub, exec_config)
         return task_id, ns.name
 
     def submit_named_followup_bg(
@@ -757,7 +689,7 @@ class Orchestrator:
         """Submit a background follow-up to an existing named session. Returns task_id."""
         from ductor_bot.cli.param_resolver import resolve_cli_config
 
-        if self._bg_observer is None:
+        if self._observers.background is None:
             msg = "Background observer not initialized"
             raise RuntimeError(msg)
 
@@ -773,7 +705,7 @@ class Orchestrator:
             raise ValueError(msg)
 
         self._named_sessions.mark_running(chat_id, session_name, prompt)
-        exec_config = resolve_cli_config(self._config, self._codex_cache)
+        exec_config = resolve_cli_config(self._config, self._observers.codex_cache)
         sub = BackgroundSubmit(
             chat_id=chat_id,
             prompt=prompt,
@@ -784,7 +716,7 @@ class Orchestrator:
             provider_override=ns.provider,
             model_override=ns.model,
         )
-        return self._bg_observer.submit(sub, exec_config)
+        return self._observers.background.submit(sub, exec_config)
 
     async def end_named_session(self, chat_id: int, name: str) -> bool:
         """Kill process and end a named session."""
@@ -799,15 +731,17 @@ class Orchestrator:
         """Return True if *candidate* is a recognized model ID for any provider."""
         if candidate in self._known_model_ids:
             return True
-        return bool(self._codex_cache and self._codex_cache.validate_model(candidate))
+        codex = self._observers.codex_cache
+        return bool(codex and codex.validate_model(candidate))
 
     def default_model_for_provider(self, provider: str) -> str:
         """Return the default model ID for a provider, or empty string if unknown."""
         if provider == "claude":
             return self._config.model if self._config.provider == "claude" else "sonnet"
         if provider == "codex":
-            if self._codex_cache:
-                for m in self._codex_cache.models:
+            codex = self._observers.codex_cache
+            if codex:
+                for m in codex.models:
                     if m.is_default:
                         return m.id
             return ""
@@ -840,9 +774,9 @@ class Orchestrator:
 
     def active_background_tasks(self, chat_id: int | None = None) -> list[BackgroundTask]:
         """Return active background tasks, optionally filtered by chat_id."""
-        if self._bg_observer is None:
+        if self._observers.background is None:
             return []
-        return self._bg_observer.active_tasks(chat_id)
+        return self._observers.background.active_tasks(chat_id)
 
     @property
     def active_provider_name(self) -> str:
@@ -957,98 +891,7 @@ class Orchestrator:
 
         logger.info("Hot-reload applied to orchestrator services")
 
-    async def _stop_observers(self) -> None:
-        """Stop all background observers and caches."""
-        if self._config_reloader:
-            await self._config_reloader.stop()
-        if self._bg_observer:
-            await self._bg_observer.shutdown()
-        await self._heartbeat.stop()
-        if self._webhook_observer:
-            await self._webhook_observer.stop()
-        if self._cron_observer:
-            await self._cron_observer.stop()
-        await self._cleanup_observer.stop()
-        if self._codex_cache_observer:
-            await self._codex_cache_observer.stop()
-            self._codex_cache_observer = None
-        if self._gemini_cache_observer:
-            await self._gemini_cache_observer.stop()
-            self._gemini_cache_observer = None
-
     # -- Inter-agent communication ------------------------------------------
-
-    def _interagent_chat_id(self) -> int:
-        """Return the real Telegram chat_id for inter-agent sessions."""
-        if not self._config.allowed_user_ids:
-            logger.warning("No allowed_user_ids configured — inter-agent sessions use chat_id=0")
-            return 0
-        return self._config.allowed_user_ids[0]
-
-    def _get_or_create_interagent_session(
-        self,
-        sender: str,
-        *,
-        new_session: bool = False,
-    ) -> tuple[NamedSession, bool, str]:
-        """Get or create a Named Session for an inter-agent conversation.
-
-        Uses a deterministic name ``ia-{sender}`` so follow-up messages from
-        the same sender automatically resume the same session.
-
-        If *new_session* is True, any existing session for this sender is
-        ended first so a fresh one is created.
-
-        If the active provider/model has changed since the session was created,
-        the old session is ended automatically (the CLI session ID is not
-        portable across providers) and a provider-switch notice is returned.
-
-        Returns ``(session, is_new, provider_switch_notice)``.
-        """
-        chat_id = self._interagent_chat_id()
-        session_name = f"ia-{sender}"
-        provider_switch_notice = ""
-
-        if new_session and self._named_sessions.end_session(chat_id, session_name):
-            logger.info("Inter-agent session reset: %s (sender=%s)", session_name, sender)
-
-        model_name, provider_name = self.resolve_runtime_target(self._config.model)
-
-        ns = self._named_sessions.get(chat_id, session_name)
-        if ns is not None and ns.status != "ended":
-            # Detect provider/model mismatch → session ID is not portable
-            if ns.provider != provider_name:
-                old_provider = ns.provider
-                self._named_sessions.end_session(chat_id, session_name)
-                logger.info(
-                    "Inter-agent session %s reset: provider changed %s -> %s",
-                    session_name,
-                    old_provider,
-                    provider_name,
-                )
-                provider_switch_notice = (
-                    f"Agent `{self._cli_service._config.agent_name}` switched "
-                    f"provider from `{old_provider}` to `{provider_name}`.\n"
-                    f"The previous inter-agent session `{session_name}` is no longer "
-                    f"resumable and has been ended.\n"
-                    f"A new session `{session_name}` was started with `{provider_name}`."
-                )
-            else:
-                return ns, False, ""
-
-        ns = NamedSession(
-            name=session_name,
-            chat_id=chat_id,
-            provider=provider_name,
-            model=model_name,
-            session_id="",
-            prompt_preview=f"Inter-agent session with {sender}",
-            status="running",
-            created_at=time.time(),
-        )
-        self._named_sessions.add(ns)
-        logger.info("Inter-agent named session created: %s (sender=%s)", session_name, sender)
-        return ns, True, provider_switch_notice
 
     async def handle_interagent_message(
         self,
@@ -1057,60 +900,12 @@ class Orchestrator:
         *,
         new_session: bool = False,
     ) -> tuple[str, str, str]:
-        """Process a message from another agent via the InterAgentBus.
-
-        Uses a Named Session per sender so that context is preserved across
-        multiple inter-agent interactions.  The session can also be resumed
-        manually from Telegram via ``@ia-{sender} <message>``.
-
-        Returns ``(result_text, session_name, provider_switch_notice)``.
-        The *provider_switch_notice* is non-empty when a provider change
-        caused an automatic session reset — callers should notify the user.
-        """
-        from ductor_bot.cli.types import AgentRequest
-
-        own_name = self._cli_service._config.agent_name
-        chat_id = self._interagent_chat_id()
-        ns, _is_new, provider_switch_notice = self._get_or_create_interagent_session(
-            sender,
-            new_session=new_session,
+        """Process a message from another agent via the InterAgentBus."""
+        from ductor_bot.orchestrator.injection import (
+            handle_interagent_message as _handle_ia,
         )
 
-        prompt = (
-            f"[INTER-AGENT MESSAGE from '{sender}' to '{own_name}']\n"
-            f"{message}\n"
-            f"[END INTER-AGENT MESSAGE]\n\n"
-            f"You are agent '{own_name}'. Respond to this inter-agent request "
-            f"from '{sender}'. Be direct and concise."
-        )
-
-        ns.status = "running"
-        request = AgentRequest(
-            prompt=prompt,
-            chat_id=chat_id,
-            process_label=f"interagent:{sender}",
-            resume_session=ns.session_id or None,
-            timeout_seconds=self._config.cli_timeout,
-        )
-
-        try:
-            response = await self._cli_service.execute(request)
-        except Exception:
-            ns.status = "idle"
-            logger.exception("Inter-agent message handling failed (from=%s)", sender)
-            return (
-                f"Error processing inter-agent message from '{sender}'",
-                ns.name,
-                provider_switch_notice,
-            )
-        else:
-            if response and response.session_id:
-                self._named_sessions.update_after_response(
-                    chat_id, ns.name, response.session_id, status="idle"
-                )
-            else:
-                ns.status = "idle"
-            return (response.result if response else ""), ns.name, provider_switch_notice
+        return await _handle_ia(self, sender, message, new_session=new_session)
 
     async def handle_async_interagent_result(
         self,
@@ -1118,82 +913,12 @@ class Orchestrator:
         *,
         chat_id: int = 0,
     ) -> str:
-        """Inject an async inter-agent result into the current active session.
-
-        Called when another agent completes an async request we sent.
-        Resumes the *current* active session (not the one that was active when
-        the task was dispatched) so the agent has full conversation context.
-
-        The prompt is self-contained: it includes both the original task
-        description and the sub-agent's response, so the agent can process
-        the result even if the session changed (``/new``, provider switch).
-
-        Caller must hold the per-chat lock to prevent concurrent session access.
-        """
-        from ductor_bot.cli.types import AgentRequest
-        from ductor_bot.orchestrator.flows import _update_session
-
-        own_name = self._cli_service._config.agent_name
-        recipient = result.recipient
-        task_id = result.task_id
-
-        session_hint = (
-            f"\nThe recipient processed this in session `{result.session_name}`. "
-            f"The user can continue this session in the recipient's Telegram chat "
-            f"via `@{result.session_name} <message>`."
-            if result.session_name
-            else ""
+        """Inject an async inter-agent result into the current active session."""
+        from ductor_bot.orchestrator.injection import (
+            handle_async_interagent_result as _handle_async_ia,
         )
 
-        task_context = (
-            f"\n\nOriginal task you sent to '{recipient}':\n{result.original_message}"
-            if result.original_message
-            else ""
-        )
-
-        prompt = (
-            f"[ASYNC INTER-AGENT RESPONSE from '{recipient}' (task {task_id})]\n"
-            f"{result.result_text}\n"
-            f"[END ASYNC INTER-AGENT RESPONSE]{session_hint}{task_context}\n\n"
-            f"You are agent '{own_name}'. Process this response from agent "
-            f"'{recipient}' and communicate the relevant results to the user "
-            f"in your Telegram chat."
-        )
-
-        # Always resume the CURRENT active session (not the original one).
-        active = await self._sessions.get_active(chat_id)
-        resume_id = active.session_id if active else None
-
-        logger.debug(
-            "Injecting async result into main session: task=%s from=%s "
-            "resume_session=%s original_msg_len=%d",
-            task_id,
-            recipient,
-            resume_id[:8] if resume_id else "<new>",
-            len(result.original_message),
-        )
-
-        request = AgentRequest(
-            prompt=prompt,
-            chat_id=chat_id,
-            process_label=f"interagent-async:{recipient}",
-            resume_session=resume_id,
-            timeout_seconds=self._config.cli_timeout,
-        )
-
-        try:
-            response = await self._cli_service.execute(request)
-        except Exception:
-            logger.exception(
-                "Async inter-agent result handling failed (from=%s)",
-                recipient,
-            )
-            return f"Error processing async result from '{recipient}'"
-
-        if active and response:
-            await _update_session(self, active, response)
-
-        return response.result if response else ""
+        return await _handle_async_ia(self, result, chat_id=chat_id)
 
     async def handle_task_result(
         self,
@@ -1201,70 +926,12 @@ class Orchestrator:
         *,
         chat_id: int = 0,
     ) -> str:
-        """Inject a background task result into the current active session.
-
-        Follows the same pattern as ``handle_async_interagent_result``:
-        resumes the *current* active session so the agent has full context.
-        Works even after ``/new`` because the prompt is self-contained.
-
-        Caller must hold the per-chat lock.
-        """
-        from ductor_bot.cli.types import AgentRequest
-        from ductor_bot.orchestrator.flows import _update_session
-
-        task_id = result.task_id
-        is_error = result.status in ("failed", "timeout")
-
-        if is_error:
-            prompt = (
-                f"[BACKGROUND TASK FAILED: task_id='{task_id}' name='{result.name}']\n"
-                f"Error: {result.error}\n"
-                f"Provider: {result.provider}/{result.model} | "
-                f"Duration: {result.elapsed_seconds:.0f}s\n\n"
-                f"Original task: {result.original_prompt}\n\n"
-                f"Inform the user that the background task '{result.name}' failed "
-                f"and suggest next steps."
-            )
-        else:
-            prompt = (
-                f"[BACKGROUND TASK COMPLETED: task_id='{task_id}' name='{result.name}']\n"
-                f"Provider: {result.provider}/{result.model} | "
-                f"Duration: {result.elapsed_seconds:.0f}s\n\n"
-                f"{result.result_text}\n\n"
-                f"[END TASK RESULT]\n\n"
-                f"Original task: {result.original_prompt}\n\n"
-                f"Process this background task result and communicate the "
-                f"relevant findings to the user."
-            )
-
-        active = await self._sessions.get_active(chat_id)
-        resume_id = active.session_id if active else None
-
-        logger.debug(
-            "Injecting task result into session: task=%s name='%s' status=%s",
-            task_id,
-            result.name,
-            result.status,
+        """Inject a background task result into the current active session."""
+        from ductor_bot.orchestrator.injection import (
+            handle_task_result as _handle_task,
         )
 
-        request = AgentRequest(
-            prompt=prompt,
-            chat_id=chat_id,
-            process_label=f"task-result:{task_id}",
-            resume_session=resume_id,
-            timeout_seconds=self._config.cli_timeout,
-        )
-
-        try:
-            response = await self._cli_service.execute(request)
-        except Exception:
-            logger.exception("Task result handling failed (task=%s)", task_id)
-            return f"Error processing result from task '{result.name}'"
-
-        if active and response:
-            await _update_session(self, active, response)
-
-        return response.result if response else ""
+        return await _handle_task(self, result, chat_id=chat_id)
 
     async def handle_task_question(
         self,
@@ -1273,54 +940,12 @@ class Orchestrator:
         task_preview: str,
         chat_id: int,
     ) -> str:
-        """Inject a task worker's question into the main agent's session.
-
-        The main agent decides how to handle the question:
-        - Answer directly via resume_task.py if it knows the answer
-        - Ask the user first, then resume the task with the answer
-
-        Caller must hold the per-chat lock.
-        """
-        from ductor_bot.cli.types import AgentRequest
-        from ductor_bot.orchestrator.flows import _update_session
-
-        prompt = (
-            f"[TASK WORKER QUESTION]\n"
-            f"Task ID: {task_id}\n"
-            f"Task: {task_preview}\n\n"
-            f"Your background worker asks:\n"
-            f'"{question}"\n\n'
-            f"The worker has finished and is waiting for your answer.\n"
-            f"To answer, resume the task:\n"
-            f'  python3 tools/task_tools/resume_task.py {task_id} "your answer"\n\n'
-            f"If you know the answer → resume the task now and inform the user.\n"
-            f"If you need more info → ask the user first, then resume.\n"
-            f"[END TASK QUESTION]"
+        """Inject a task worker's question into the main agent's session."""
+        from ductor_bot.orchestrator.injection import (
+            handle_task_question as _handle_question,
         )
 
-        active = await self._sessions.get_active(chat_id)
-        resume_id = active.session_id if active else None
-
-        logger.debug("Answering task question: task=%s question='%s'", task_id, question[:60])
-
-        request = AgentRequest(
-            prompt=prompt,
-            chat_id=chat_id,
-            process_label=f"task-question:{task_id}",
-            resume_session=resume_id,
-            timeout_seconds=self._config.cli_timeout,
-        )
-
-        try:
-            response = await self._cli_service.execute(request)
-        except Exception:
-            logger.exception("Task question handling failed (task=%s)", task_id)
-            return ""
-
-        if active and response:
-            await _update_session(self, active, response)
-
-        return response.result if response else ""
+        return await _handle_question(self, task_id, question, task_preview, chat_id)
 
     async def shutdown(self) -> None:
         """Cleanup on bot shutdown."""
@@ -1329,13 +954,8 @@ class Orchestrator:
             logger.info("Shutdown terminated %d active CLI process(es)", killed)
         if self._api_stop is not None:
             await self._api_stop()
-        for task in (self._rule_sync_task, self._skill_sync_task):
-            if task and not task.done():
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
         await asyncio.to_thread(cleanup_ductor_links, self._paths)
-        await self._stop_observers()
+        await self._observers.stop_all()
         if self._docker:
             await self._docker.teardown()
         logger.info("Orchestrator shutdown")

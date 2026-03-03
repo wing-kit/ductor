@@ -60,7 +60,7 @@ async def test_toggle_job_updates_enabled_flag(orch: Orchestrator) -> None:
     _add_job(orch, job_id="daily", title="Daily Report", enabled=True)
     observer = MagicMock()
     observer.request_reschedule = MagicMock()
-    object.__setattr__(orch, "_cron_observer", observer)
+    orch._observers.cron = observer
 
     _text, keyboard = await cron_selector_start(orch)
     assert keyboard is not None

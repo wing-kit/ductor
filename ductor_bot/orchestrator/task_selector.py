@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from ductor_bot.orchestrator.selector_utils import format_age
 from ductor_bot.text.response_format import SEP, fmt
 
 if TYPE_CHECKING:
@@ -197,7 +198,7 @@ def _format_entry(entry: TaskEntry, now: float) -> str:
     if entry.elapsed_seconds:
         duration = f"{entry.elapsed_seconds:.0f}s"
     else:
-        duration = _format_age(now - entry.created_at)
+        duration = format_age(now - entry.created_at)
     provider = f"{entry.provider}/{entry.model}" if entry.provider else ""
     parts = [f"  {icon} **{entry.name}**"]
     if provider:
@@ -220,14 +221,3 @@ def _status_icon(status: str) -> str:
     if status == "waiting":
         return "[?]"
     return f"[{status}]"
-
-
-def _format_age(seconds: float) -> str:
-    """Format age as a human-readable short string."""
-    if seconds < 60:
-        return f"{int(seconds)}s"
-    if seconds < 3600:
-        return f"{int(seconds / 60)}m"
-    if seconds < 86400:
-        return f"{int(seconds / 3600)}h"
-    return f"{int(seconds / 86400)}d"
