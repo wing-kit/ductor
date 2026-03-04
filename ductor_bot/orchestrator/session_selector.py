@@ -69,7 +69,7 @@ def _format_topic_block(topic_sessions: list[SessionData]) -> str:
         name = ts.topic_name or f"Topic #{ts.topic_id}"
         msgs = f"{ts.message_count} msg" if ts.message_count == 1 else f"{ts.message_count} msgs"
         cost = f"${ts.total_cost_usd:.2f}"
-        lines.append(f"  {idx}. {name} | {ts.provider}/{ts.model} | {msgs}, {cost}")
+        lines.append(f"  {idx}. {name} · {ts.provider}/{ts.model} · {msgs}, {cost}")
     return "\n".join(lines)
 
 
