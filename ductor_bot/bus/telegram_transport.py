@@ -78,7 +78,7 @@ class TelegramTransport:
         return SendRichOpts(
             reply_to_message_id=envelope.reply_to_message_id,
             allowed_roots=self._roots(),
-            thread_id=envelope.thread_id,
+            thread_id=envelope.topic_id or envelope.thread_id,
         )
 
     # -- Origin handlers (unicast) -----------------------------------------
