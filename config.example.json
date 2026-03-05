@@ -15,9 +15,17 @@
     "file_access": "all",
     "gemini_api_key": "null",
     "user_timezone": "",
+    "transport": "telegram",
     "telegram_token": "YOUR_BOT_TOKEN_HERE",
     "allowed_user_ids": [],
     "allowed_group_ids": [],
+    "matrix": {
+        "homeserver": "",
+        "user_id": "",
+        "password": "",
+        "allowed_rooms": [],
+        "allowed_users": []
+    },
     "streaming": {
         "enabled": true,
         "min_chars": 200,

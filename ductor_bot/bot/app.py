@@ -64,6 +64,7 @@ from ductor_bot.bus.lock_pool import LockPool
 from ductor_bot.commands import BOT_COMMANDS as _COMMAND_DEFS
 from ductor_bot.commands import MULTIAGENT_SUB_COMMANDS as _MA_SUB_DEFS
 from ductor_bot.config import AgentConfig
+from ductor_bot.notifications import NotificationService
 from ductor_bot.files.allowed_roots import resolve_allowed_roots
 from ductor_bot.infra.restart import EXIT_RESTART, consume_restart_marker
 from ductor_bot.infra.updater import UpdateObserver
@@ -123,6 +124,21 @@ async def _cancel_task(task: asyncio.Task[None] | None) -> None:
             await task
 
 
+class TelegramNotificationService:
+    """NotificationService implementation for Telegram."""
+
+    def __init__(self, bot: Bot, config: AgentConfig) -> None:
+        self._bot = bot
+        self._config = config
+
+    async def notify(self, chat_id: int, text: str) -> None:
+        await send_rich(self._bot, chat_id, text, None)
+
+    async def notify_all(self, text: str) -> None:
+        for uid in self._config.allowed_user_ids:
+            await send_rich(self._bot, uid, text, None)
+
+
 class TelegramBot:
     """Telegram frontend. All logic lives in the Orchestrator."""
 
@@ -135,6 +151,9 @@ class TelegramBot:
         self._bot = Bot(
             token=config.telegram_token,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        self._notification_service: NotificationService = TelegramNotificationService(
+            self._bot, config
         )
         self._bot_id: int | None = None
         self._bot_username: str | None = None
@@ -209,6 +228,15 @@ class TelegramBot:
     def config(self) -> AgentConfig:
         """Public read-only access to the agent configuration."""
         return self._config
+
+    @property
+    def notification_service(self) -> NotificationService:
+        """Transport-agnostic notification interface."""
+        return self._notification_service
+
+    def register_startup_hook(self, hook: Callable[[], Awaitable[None]]) -> None:
+        """Register a callback to run after bot startup (used by supervisor)."""
+        self._dp.startup.register(hook)
 
     @property
     def sequential(self) -> SequentialMiddleware:

@@ -70,6 +70,12 @@ def _is_configured() -> bool:
         data = json.loads(paths.config_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return False
+
+    transport = data.get("transport", "telegram")
+    if transport == "matrix":
+        mx = data.get("matrix", {})
+        return bool(mx.get("homeserver")) and bool(mx.get("user_id"))
+
     token = data.get("telegram_token", "")
     users = data.get("allowed_user_ids", [])
     return bool(token) and not str(token).startswith("YOUR_") and bool(users)
@@ -135,7 +141,7 @@ def load_config() -> AgentConfig:
 # ---------------------------------------------------------------------------
 
 
-async def run_telegram(config: AgentConfig) -> int:
+async def run_bot(config: AgentConfig) -> int:
     """Validate config and run the bot via AgentSupervisor.
 
     The supervisor manages the main agent and dynamically created sub-agents
@@ -146,22 +152,17 @@ async def run_telegram(config: AgentConfig) -> int:
     """
     paths = resolve_paths(ductor_home=config.ductor_home)
 
-    missing_token = not config.telegram_token or config.telegram_token.startswith("YOUR_")
-    needs_users = not config.allowed_user_ids
-    if missing_token or needs_users:
-        _console.print(
-            "[bold yellow]Config is incomplete. Run [bold]ductor onboarding[/bold].[/bold yellow]"
-        )
-        sys.exit(1)
+    if config.transport == "matrix":
+        _validate_matrix_config(config)
+    else:
+        _validate_telegram_config(config)
 
-    from ductor_bot.bot.sender import send_rich
     from ductor_bot.infra.pidlock import acquire_lock, release_lock
     from ductor_bot.multiagent.supervisor import AgentSupervisor
 
     acquire_lock(pid_file=paths.ductor_home / "bot.pid", kill_existing=True)
 
     supervisor = AgentSupervisor(config)
-    supervisor.set_notification_sender(send_rich)
     exit_code = 0
     loop = asyncio.get_running_loop()
     current_task = asyncio.current_task()
@@ -191,6 +192,40 @@ async def run_telegram(config: AgentConfig) -> int:
         await supervisor.stop_all()
         release_lock(pid_file=paths.ductor_home / "bot.pid")
     return exit_code
+
+
+# Backward-compat alias for external scripts that call run_telegram().
+run_telegram = run_bot
+
+
+def _validate_telegram_config(config: AgentConfig) -> None:
+    """Validate Telegram transport requirements."""
+    missing_token = not config.telegram_token or config.telegram_token.startswith("YOUR_")
+    needs_users = not config.allowed_user_ids
+    if missing_token or needs_users:
+        _console.print(
+            "[bold yellow]Config is incomplete. Run [bold]ductor onboarding[/bold].[/bold yellow]"
+        )
+        sys.exit(1)
+
+
+def _validate_matrix_config(config: AgentConfig) -> None:
+    """Validate Matrix transport requirements."""
+    m = config.matrix
+    if not m.homeserver:
+        _console.print("[bold yellow]Matrix homeserver URL is required.[/bold yellow]")
+        sys.exit(1)
+    if not m.user_id:
+        _console.print("[bold yellow]Matrix user_id is required.[/bold yellow]")
+        sys.exit(1)
+    if not m.password and not m.access_token:
+        _console.print("[bold yellow]Matrix password or access_token is required.[/bold yellow]")
+        sys.exit(1)
+    if not m.allowed_rooms and not m.allowed_users:
+        _console.print(
+            "[bold yellow]At least one allowed_room or allowed_user is required.[/bold yellow]"
+        )
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------

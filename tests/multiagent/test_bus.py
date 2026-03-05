@@ -323,15 +323,14 @@ class TestBusSessionNameInResult:
 class TestBusNotifyRecipient:
     """Test _notify_recipient behavior."""
 
-    async def test_notify_sends_telegram_message(self) -> None:
-        """Notification is sent to the recipient's first allowed user."""
+    async def test_notify_sends_to_first_user(self) -> None:
+        """Notification is sent via notification_service.notify() to the first user."""
         bus = InterAgentBus()
         stack = _make_stack()
         stack.config.allowed_user_ids = [12345]
+        mock_ns = AsyncMock()
+        stack.bot.notification_service = mock_ns
         bus.register("target", stack)
-
-        mock_send = AsyncMock()
-        bus.set_notification_sender(mock_send)
 
         from ductor_bot.multiagent.bus import AsyncInterAgentTask
 
@@ -343,21 +342,20 @@ class TestBusNotifyRecipient:
         )
 
         await bus._notify_recipient(task)
-        mock_send.assert_awaited_once()
-        call_args = mock_send.call_args
-        # Callback signature: (bot, chat_id, text, opts)
-        assert call_args[0][1] == 12345  # chat_id
-        assert "main" in call_args[0][2]  # sender name in text
-        assert "ia-main" in call_args[0][2]  # session name in text
+        mock_ns.notify.assert_awaited_once()
+        call_args = mock_ns.notify.call_args
+        assert call_args[0][0] == 12345  # chat_id
+        assert "main" in call_args[0][1]  # sender name in text
+        assert "ia-main" in call_args[0][1]  # session name in text
 
-    async def test_notify_skipped_when_no_users(self) -> None:
+    async def test_notify_broadcasts_when_no_users(self) -> None:
+        """When no allowed_user_ids, notify_all() is used instead."""
         bus = InterAgentBus()
         stack = _make_stack()
         stack.config.allowed_user_ids = []
+        mock_ns = AsyncMock()
+        stack.bot.notification_service = mock_ns
         bus.register("target", stack)
-
-        mock_send = AsyncMock()
-        bus.set_notification_sender(mock_send)
 
         from ductor_bot.multiagent.bus import AsyncInterAgentTask
 
@@ -369,13 +367,15 @@ class TestBusNotifyRecipient:
         )
 
         await bus._notify_recipient(task)
-        mock_send.assert_not_awaited()
+        mock_ns.notify.assert_not_awaited()
+        mock_ns.notify_all.assert_awaited_once()
 
-    async def test_notify_skipped_when_no_callback(self) -> None:
-        """Notification is silently skipped when no callback is set."""
+    async def test_notify_skipped_when_no_service(self) -> None:
+        """Notification is silently skipped when notification_service is None."""
         bus = InterAgentBus()
         stack = _make_stack()
         stack.config.allowed_user_ids = [12345]
+        stack.bot.notification_service = None
         bus.register("target", stack)
 
         from ductor_bot.multiagent.bus import AsyncInterAgentTask
@@ -387,7 +387,7 @@ class TestBusNotifyRecipient:
             message="Hello",
         )
 
-        # No callback set — should not raise
+        # No notification_service — should not raise
         await bus._notify_recipient(task)
 
     async def test_notify_failure_does_not_raise(self) -> None:
@@ -395,9 +395,10 @@ class TestBusNotifyRecipient:
         bus = InterAgentBus()
         stack = _make_stack()
         stack.config.allowed_user_ids = [99]
+        mock_ns = AsyncMock()
+        mock_ns.notify = AsyncMock(side_effect=RuntimeError("network error"))
+        stack.bot.notification_service = mock_ns
         bus.register("target", stack)
-
-        bus.set_notification_sender(AsyncMock(side_effect=RuntimeError("network error")))
 
         from ductor_bot.multiagent.bus import AsyncInterAgentTask
 

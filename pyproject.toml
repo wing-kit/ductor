@@ -58,7 +58,10 @@ lint = [
 api = [
     "PyNaCl>=1.6.2",
 ]
-dev = ["ductor[test,lint,api]"]
+matrix = [
+    "matrix-nio>=0.25.0",
+]
+dev = ["ductor[test,lint,api,matrix]"]
 
 [project.urls]
 Homepage = "https://ductor.dev"
@@ -186,6 +189,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["nacl.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["nio.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

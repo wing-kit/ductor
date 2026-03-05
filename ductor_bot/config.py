@@ -116,6 +116,19 @@ class CLIParametersConfig(BaseModel):
     gemini: list[str] = Field(default_factory=list)
 
 
+class MatrixConfig(BaseModel):
+    """Matrix homeserver connection settings."""
+
+    homeserver: str = ""  # https://matrix.myserver.com
+    user_id: str = ""  # @ductor:myserver.com
+    password: str = ""  # for initial login
+    access_token: str = ""  # persisted after first login
+    device_id: str = ""  # persisted after first login
+    allowed_rooms: list[str] = Field(default_factory=list)  # ["!abc:server", "#room:server"]
+    allowed_users: list[str] = Field(default_factory=list)  # ["@user:server"]
+    store_path: str = "matrix_store"  # relative to ductor_home
+
+
 class TasksConfig(BaseModel):
     """Settings for background task delegation."""
 
@@ -242,9 +255,11 @@ class AgentConfig(BaseModel):
     user_timezone: str = ""
     update_check: bool = True
     group_mention_only: bool = False
+    transport: str = "telegram"  # "telegram" | "matrix"
     telegram_token: str = ""
     allowed_user_ids: list[int] = Field(default_factory=list)
     allowed_group_ids: list[int] = Field(default_factory=list)
+    matrix: MatrixConfig = Field(default_factory=MatrixConfig)
 
     @field_validator("gemini_api_key", mode="before")
     @classmethod

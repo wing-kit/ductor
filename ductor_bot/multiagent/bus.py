@@ -10,15 +10,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aiogram import Bot
-
 if TYPE_CHECKING:
-    from ductor_bot.bot.sender import SendRichOpts
     from ductor_bot.multiagent.stack import AgentStack
+    from ductor_bot.notifications import NotificationService
 
 logger = logging.getLogger(__name__)
-
-NotifyCallback = Callable[[Bot, int, str, "SendRichOpts | None"], Awaitable[None]]
 
 _DEFAULT_TIMEOUT = 300.0  # 5 minutes — for synchronous sends
 _ASYNC_TIMEOUT = 3600.0  # 1 hour — async tasks may run complex multi-step work
@@ -114,11 +110,6 @@ class InterAgentBus:
         self._message_log: list[InterAgentMessage] = []
         self._async_tasks: dict[str, AsyncInterAgentTask] = {}
         self._async_result_handlers: dict[str, AsyncResultCallback] = {}
-        self._notify_sender: NotifyCallback | None = None
-
-    def set_notification_sender(self, callback: NotifyCallback) -> None:
-        """Set callback for sending Telegram notifications to recipients."""
-        self._notify_sender = callback
 
     def register(self, name: str, stack: AgentStack) -> None:
         """Register an agent on the bus."""
@@ -377,20 +368,19 @@ class InterAgentBus:
             )
 
     async def _notify_recipient(self, task: AsyncInterAgentTask) -> None:
-        """Send a short notification to the recipient agent's Telegram chat.
+        """Send a short notification to the recipient agent's chat.
 
         This makes async task delegation visible — the recipient's user sees
         what task was received and from whom before processing begins.
         Best-effort: failures are logged but never block execution.
         """
         try:
-            if self._notify_sender is None:
-                return
             target = self._agents.get(task.recipient)
             if target is None:
                 return
-            chat_id = target.config.allowed_user_ids[0] if target.config.allowed_user_ids else 0
-            if not chat_id:
+
+            ns = target.bot.notification_service
+            if ns is None:
                 return
 
             # Use explicit summary if provided, otherwise truncate message
@@ -405,7 +395,11 @@ class InterAgentBus:
                 f"_{preview}_"
             )
 
-            await self._notify_sender(target.bot.bot_instance, chat_id, text, None)
+            chat_id = target.config.allowed_user_ids[0] if target.config.allowed_user_ids else 0
+            if chat_id:
+                await ns.notify(chat_id, text)
+            else:
+                await ns.notify_all(text)
         except Exception:
             logger.debug(
                 "Failed to notify recipient '%s' about async task %s (non-critical)",

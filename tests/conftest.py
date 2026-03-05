@@ -53,6 +53,20 @@ def _no_real_process_signals() -> object:
         yield
 
 
+@pytest.fixture(autouse=True)
+def _no_real_service_management() -> object:
+    """Prevent tests from stopping/starting the real systemd service.
+
+    ``lifecycle.stop_bot()`` calls ``_stop_service_if_running()`` which runs
+    ``systemctl --user stop ductor.service`` — killing the live service on any
+    machine where ductor is installed and running.
+    """
+    with patch(
+        "ductor_bot.cli_commands.lifecycle._stop_service_if_running",
+    ):
+        yield
+
+
 @pytest.fixture
 def tmp_ductor_home(tmp_path: Path) -> Path:
     """Temporary ~/.ductor equivalent."""

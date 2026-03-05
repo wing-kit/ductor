@@ -187,7 +187,6 @@ class TestRunTelegram:
         mock_supervisor = MagicMock()
         mock_supervisor.start = AsyncMock(return_value=0)
         mock_supervisor.stop_all = AsyncMock()
-        mock_supervisor.set_notification_sender = MagicMock()
 
         with (
             patch("ductor_bot.__main__.resolve_paths"),
