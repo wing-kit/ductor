@@ -18,6 +18,17 @@ This is the navigation index for workspace tools.
 - background tasks (delegate, list, cancel) -> `task_tools/CLAUDE/GEMINI/AGENTS.md`
 - custom user scripts -> `user_tools/CLAUDE.md`
 
+## Bot Restart
+
+To restart the bot (e.g. after config changes or recovery):
+
+```bash
+touch ~/.ductor/restart-requested
+```
+
+The bot picks up this marker within seconds and restarts cleanly.
+No tool script needed — just create the file.
+
 ## Output and Memory
 
 - Save user deliverables in `../output_to_user/`.

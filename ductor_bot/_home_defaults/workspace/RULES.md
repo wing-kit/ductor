@@ -71,6 +71,17 @@ Custom skills live in `skills/`. See `skills/CLAUDE/GEMINI/AGENTS.md` for sync r
 - For cron task behavior changes, edit `cron_tasks/<name>/TASK_DESCRIPTION.md`.
 - For cron task folder structure, see `cron_tasks/CLAUDE/GEMINI/AGENTS.md`.
 
+## Bot Restart
+
+If you need the bot to restart (e.g. after config changes, updates, or recovery):
+
+```bash
+touch ~/.ductor/restart-requested
+```
+
+The bot detects this marker within seconds and performs a clean restart.
+Always tell the user you triggered a restart.
+
 ## Safety Boundaries
 
 - Ask for confirmation before destructive actions.
