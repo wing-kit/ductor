@@ -872,6 +872,12 @@ class MatrixBot:
             resp = await handle_session_callback(orch, chat_id, callback_data)
         elif is_task_selector_callback(callback_data):
             resp = await handle_task_callback(orch, callback_data)
+        elif callback_data.startswith("upg:"):
+            await self._handle_upgrade_callback(room_id, callback_data)
+            return
+        elif callback_data.startswith("ns:"):
+            await self._handle_ns_callback(room_id, key, callback_data)
+            return
         else:
             # Unknown callback — treat as text input to the orchestrator
             result = await orch.handle_message(key, callback_data)
@@ -881,6 +887,80 @@ class MatrixBot:
 
         if resp:
             await self._send_selector_response(room_id, resp.text, resp.buttons)
+
+    # --- Upgrade callback ---
+
+    async def _handle_upgrade_callback(self, room_id: str, data: str) -> None:
+        """Handle ``upg:cl:<version>``, ``upg:yes:<version>``, ``upg:no`` callbacks."""
+        if data == "upg:no":
+            await self._send_rich(room_id, "Upgrade skipped.")
+            return
+
+        if data.startswith("upg:cl:"):
+            version = data.split(":", 2)[2] if data.count(":") >= 2 else ""
+            if not version:
+                return
+            from ductor_bot.infra.version import fetch_changelog
+
+            body = await fetch_changelog(version)
+            if body:
+                await self._send_rich(room_id, f"**Changelog v{version}**\n\n{body}")
+            else:
+                await self._send_rich(room_id, f"No changelog found for v{version}.")
+            return
+
+        if data.startswith("upg:yes:"):
+            from ductor_bot.infra.restart import EXIT_RESTART, write_restart_marker
+            from ductor_bot.infra.updater import perform_upgrade_pipeline
+            from ductor_bot.infra.version import get_current_version
+
+            current = get_current_version()
+            await self._send_rich(room_id, "Upgrading...")
+            changed, installed, _output = await perform_upgrade_pipeline(
+                current_version=current,
+            )
+            if changed:
+                marker = _expand_marker(self._config.ductor_home)
+                write_restart_marker(marker_path=marker)
+                await self._send_rich(
+                    room_id, f"Upgraded {current} → {installed}. Restarting..."
+                )
+                self._exit_code = EXIT_RESTART
+                if self._sync_task and not self._sync_task.done():
+                    self._sync_task.cancel()
+            else:
+                await self._send_rich(
+                    room_id, f"Upgrade could not verify a new version (still {installed})."
+                )
+
+    # --- Named session callback ---
+
+    async def _handle_ns_callback(
+        self, room_id: str, key: SessionKey, data: str
+    ) -> None:
+        """Handle ``ns:<session_name>:<label>`` button callbacks."""
+        from ductor_bot.messenger.telegram.callbacks import parse_ns_callback
+
+        parsed = parse_ns_callback(data)
+        if parsed is None:
+            return
+        session_name, label = parsed
+
+        orch = self._orchestrator
+        if not orch:
+            return
+
+        if self._config.streaming.enabled:
+            from ductor_bot.orchestrator.flows import named_session_streaming
+
+            result = await named_session_streaming(orch, key, session_name, label)
+        else:
+            from ductor_bot.orchestrator.flows import named_session_flow
+
+            result = await named_session_flow(orch, key, session_name, label)
+
+        if result.text:
+            await self._send_rich(room_id, result.text)
 
     # --- Join notification ---
 
