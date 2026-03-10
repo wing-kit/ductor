@@ -430,6 +430,10 @@ class Orchestrator:
         self._named_sessions.end_all(chat_id)
         return killed
 
+    async def abort_all(self) -> int:
+        """Kill all active CLI processes across all chats on this agent."""
+        return await self._process_registry.kill_all_active()
+
     def resolve_runtime_target(self, requested_model: str | None = None) -> tuple[str, str]:
         """Resolve requested model to the effective ``(model, provider)`` pair."""
         return self._providers.resolve_runtime_target(requested_model)

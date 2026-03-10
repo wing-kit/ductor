@@ -67,7 +67,7 @@ class TestHandleAbortAll:
         from ductor_bot.messenger.telegram.handlers import handle_abort_all
 
         orchestrator = MagicMock()
-        orchestrator.abort = AsyncMock(return_value=2)
+        orchestrator.abort_all = AsyncMock(return_value=2)
         callback = AsyncMock(return_value=3)
         bot = MagicMock()
         bot.send_message = AsyncMock()
@@ -81,14 +81,14 @@ class TestHandleAbortAll:
             abort_all_callback=callback,
         )
         assert result is True
-        orchestrator.abort.assert_called_once_with(42)
+        orchestrator.abort_all.assert_called_once()
         callback.assert_called_once()
 
     async def test_abort_all_no_callback(self) -> None:
         from ductor_bot.messenger.telegram.handlers import handle_abort_all
 
         orchestrator = MagicMock()
-        orchestrator.abort = AsyncMock(return_value=1)
+        orchestrator.abort_all = AsyncMock(return_value=1)
         bot = MagicMock()
         bot.send_message = AsyncMock()
 
@@ -101,7 +101,7 @@ class TestHandleAbortAll:
             abort_all_callback=None,
         )
         assert result is True
-        orchestrator.abort.assert_called_once_with(42)
+        orchestrator.abort_all.assert_called_once()
 
     async def test_abort_all_no_orchestrator(self) -> None:
         from ductor_bot.messenger.telegram.handlers import handle_abort_all
@@ -114,7 +114,7 @@ class TestHandleAbortAll:
         from ductor_bot.messenger.telegram.handlers import handle_abort_all
 
         orchestrator = MagicMock()
-        orchestrator.abort = AsyncMock(return_value=0)
+        orchestrator.abort_all = AsyncMock(return_value=0)
         callback = AsyncMock(return_value=0)
         bot = MagicMock()
         bot.send_message = AsyncMock()

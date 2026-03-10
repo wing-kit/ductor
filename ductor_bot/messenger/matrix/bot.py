@@ -130,6 +130,9 @@ class MatrixBot:
         # Rooms currently in join→leave cycle (reject flow)
         self._leaving_rooms: set[str] = set()
 
+        # Block message processing until initial sync completes
+        self._ready = False
+
         # Last room that sent a message (fallback for delivery when allowed_rooms is empty)
         self._last_active_room: str | None = None
 
@@ -200,13 +203,18 @@ class MatrixBot:
 
         # Initial sync to populate room list (needed for notifications before
         # any user message arrives, e.g. inter-agent delivery).
+        # Callbacks are registered but _ready=False blocks message processing.
         await self._client.sync(timeout=10000, full_state=True)
+        self._save_sync_token()  # Persist so next restart skips replayed events
         self._populate_rooms_from_sync()
 
         # Run startup (orchestrator, observers, hooks)
         from ductor_bot.messenger.matrix.startup import run_matrix_startup
 
         await run_matrix_startup(self)
+
+        # Now accept incoming messages
+        self._ready = True
 
         # Start restart marker watcher
         self._restart_watcher = asyncio.create_task(self._watch_restart_marker())
@@ -266,6 +274,9 @@ class MatrixBot:
         """Handle incoming room messages."""
         from nio import MatrixRoom, RoomMessageText
 
+        if not self._ready:
+            return
+
         if not isinstance(room, MatrixRoom) or not isinstance(event, RoomMessageText):
             return
 
@@ -305,6 +316,9 @@ class MatrixBot:
     async def _on_media(self, room: MatrixRoom | object, event: RoomMessageMedia | object) -> None:
         """Handle incoming media messages (images, audio, video, files)."""
         from nio import MatrixRoom, RoomMessageMedia
+
+        if not self._ready:
+            return
 
         if not isinstance(room, MatrixRoom) or not isinstance(event, RoomMessageMedia):
             return
@@ -398,11 +412,11 @@ class MatrixBot:
     async def _cmd_stop_all(
         self, *, text: str, room_id: str, key: SessionKey, event: object
     ) -> None:
-        """Stop all running processes across all agents."""
+        """Stop all running processes across all chats and agents."""
         orch = self._orchestrator
         killed = 0
         if orch:
-            killed = await orch.abort(key.chat_id)
+            killed = await orch.abort_all()
         if self._abort_all_callback:
             killed += await self._abort_all_callback()
         msg = f"Stopped {killed} process(es)." if killed else "No active processes."
@@ -806,6 +820,8 @@ class MatrixBot:
         """Handle m.reaction events for button selection."""
         from nio import MatrixRoom, ReactionEvent
 
+        if not self._ready:
+            return
         if not isinstance(room, MatrixRoom) or not isinstance(event, ReactionEvent):
             return
         if event.sender == self._client.user_id:
@@ -949,7 +965,11 @@ class MatrixBot:
     def _restore_sync_token(self) -> None:
         token_file = self._store_path / "next_batch"
         if token_file.exists():
-            self._client.next_batch = token_file.read_text(encoding="utf-8").strip()
+            token = token_file.read_text(encoding="utf-8").strip()
+            self._client.next_batch = token
+            logger.info("Restored Matrix sync token: %s", token[:20])
+        else:
+            logger.info("No saved Matrix sync token, full initial sync")
 
     def _save_sync_token(self) -> None:
         if self._client.next_batch:

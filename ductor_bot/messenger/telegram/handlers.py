@@ -67,8 +67,8 @@ async def handle_abort_all(
     if orchestrator is None:
         return False
 
-    # Kill local processes first
-    killed = await orchestrator.abort(chat_id)
+    # Kill all local processes (across all chats/transports)
+    killed = await orchestrator.abort_all()
 
     # Kill processes on all other agents via the supervisor callback
     if abort_all_callback is not None:
