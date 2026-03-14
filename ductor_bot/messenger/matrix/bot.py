@@ -313,6 +313,9 @@ class MatrixBot:
         self._last_active_room = room_id
         chat_id = self._id_map.room_to_int(room_id)
 
+        if self._config.scene.seen_reaction:
+            await self._set_seen_read_receipt(room_id, event.event_id)
+
         # Check button match (text-input fallback for reactions)
         button_match = self._button_tracker.match_input(room_id, text)
         if button_match:
@@ -355,6 +358,9 @@ class MatrixBot:
         room_id = room.room_id
         self._last_active_room = room_id
         chat_id = self._id_map.room_to_int(room_id)
+
+        if self._config.scene.seen_reaction:
+            await self._set_seen_read_receipt(room_id, event.event_id)
 
         # Download and build prompt
         from ductor_bot.messenger.matrix.media import resolve_matrix_media
@@ -688,6 +694,7 @@ class MatrixBot:
                 on_tool_activity=editor.on_tool,
                 on_system_status=editor.on_system,
             )
+        self._maybe_append_footer(result)
         await editor.finalize(result.text)
 
     async def _run_non_streaming(
@@ -701,6 +708,7 @@ class MatrixBot:
         async with MatrixTypingContext(self._client, room_id):
             result = await orch.handle_message(key, text)
 
+        self._maybe_append_footer(result)
         if result.text:
             formatted = self._button_tracker.extract_and_format(room_id, result.text)
             await self._send_rich(room_id, formatted)
@@ -725,6 +733,32 @@ class MatrixBot:
 
         user_ok = not mx.allowed_users or event.sender in mx.allowed_users
         return room_ok and user_ok
+
+    async def _set_seen_read_receipt(self, room_id: str, event_id: str) -> None:
+        """Send a read receipt for the event. Graceful degradation on failure."""
+        try:
+            await self._client.room_read_markers(room_id, event_id)
+        except Exception:
+            logger.debug("Failed to send read receipt", exc_info=True)
+
+    def _maybe_append_footer(self, result: object) -> None:
+        """Append technical footer to result text when enabled and metadata is available."""
+        from ductor_bot.orchestrator.registry import OrchestratorResult
+
+        if not isinstance(result, OrchestratorResult):
+            return
+        if not self._config.scene.technical_footer or not result.model_name:
+            return
+        from ductor_bot.text.response_format import format_technical_footer
+
+        footer = format_technical_footer(
+            result.model_name,
+            result.total_tokens,
+            result.input_tokens,
+            result.cost_usd,
+            result.duration_ms,
+        )
+        result.text += footer
 
     # --- Group / mention helpers ---
 

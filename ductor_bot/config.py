@@ -103,6 +103,7 @@ class CleanupConfig(BaseModel):
 
     enabled: bool = True
     media_files_days: int = 30
+    group_targets: list[HeartbeatTarget] = Field(default_factory=list)
     output_to_user_days: int = 30
     api_files_days: int = 30
     check_hour: int = 3
@@ -130,6 +131,14 @@ class ImageConfig(BaseModel):
     max_dimension: int = 2000
     output_format: str = "webp"
     quality: int = 85
+
+class CLIParametersConfig(BaseModel):
+    """CLI parameters for main agent."""
+
+    claude: list[str] = Field(default_factory=list)
+    codex: list[str] = Field(default_factory=list)
+    gemini: list[str] = Field(default_factory=list)
+
 
 
 class MatrixConfig(BaseModel):

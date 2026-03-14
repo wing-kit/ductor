@@ -371,7 +371,10 @@ async def normal(
             )
         await _update_session(orch, session, response)
         logger.info("Normal flow completed")
-        result = _finish_normal(response, session, orch._config.session_age_warning_hours)
+        req_model, _prov = _request_target(orch, request)
+        result = _finish_normal(
+            response, session, orch._config.session_age_warning_hours, model_name=req_model
+        )
         if session_recovered:
             result.text = f"{_SESSION_RECOVERED_MSG}\n\n{result.text}"
         return result
@@ -435,7 +438,10 @@ async def normal_streaming(
             )
         await _update_session(orch, session, response)
         logger.info("Streaming flow completed")
-        return _finish_normal(response, session, orch._config.session_age_warning_hours)
+        req_model, _prov = _request_target(orch, request)
+        return _finish_normal(
+            response, session, orch._config.session_age_warning_hours, model_name=req_model
+        )
     finally:
         orch._inflight_tracker.complete(key.chat_id)
 
@@ -462,6 +468,8 @@ def _finish_normal(
     response: AgentResponse,
     session: SessionData | None = None,
     warning_hours: int = 0,
+    *,
+    model_name: str = "",
 ) -> OrchestratorResult:
     """Post-processing for normal() and normal_streaming()."""
     if response.is_error:
@@ -478,6 +486,11 @@ def _finish_normal(
     return OrchestratorResult(
         text=text,
         stream_fallback=response.stream_fallback,
+        model_name=model_name,
+        total_tokens=response.total_tokens,
+        input_tokens=response.input_tokens,
+        cost_usd=response.cost_usd,
+        duration_ms=response.duration_ms,
     )
 
 

@@ -28,6 +28,11 @@ class OrchestratorResult(BaseModel):
     text: str
     stream_fallback: bool = False
     buttons: ButtonGrid | None = None
+    model_name: str | None = None
+    total_tokens: int = 0
+    input_tokens: int = 0
+    cost_usd: float = 0.0
+    duration_ms: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

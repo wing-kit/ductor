@@ -17,6 +17,7 @@ class MessengerCapabilities:
     supports_typing_indicator: bool = True
     supports_file_send: bool = True
     supports_streaming_edit: bool = False
+    supports_seen_indicator: bool = False
     max_message_length: int = 4096
 
 
@@ -29,6 +30,7 @@ TELEGRAM_CAPABILITIES = MessengerCapabilities(
     supports_typing_indicator=True,
     supports_file_send=True,
     supports_streaming_edit=True,
+    supports_seen_indicator=True,
     max_message_length=4096,
 )
 
@@ -41,5 +43,6 @@ MATRIX_CAPABILITIES = MessengerCapabilities(
     supports_typing_indicator=True,
     supports_file_send=True,
     supports_streaming_edit=False,
+    supports_seen_indicator=True,
     max_message_length=40000,
 )

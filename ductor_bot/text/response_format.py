@@ -150,6 +150,25 @@ def recovery_notification_text(
 ) -> str:
     """Notification that interrupted work is being recovered."""
     preview = prompt_preview[:80] + ("…" if len(prompt_preview) > 80 else "")
+def format_technical_footer(
+    model_name: str,
+    total_tokens: int,
+    input_tokens: int,
+    cost_usd: float,
+    duration_ms: float | None,
+) -> str:
+    """Format technical metadata as a footer line."""
+    output_tokens = total_tokens - input_tokens
+    parts = [f"Model: {model_name}"]
+    parts.append(f"Tokens: {total_tokens} (in: {input_tokens}, out: {output_tokens})")
+    if cost_usd > 0:
+        parts.append(f"Cost: ${cost_usd:.4f}")
+    if duration_ms is not None:
+        secs = duration_ms / 1000
+        parts.append(f"Time: {secs:.1f}s")
+    return "\n---\n" + " | ".join(parts)
+
+
     if kind == "named_session":
         return fmt(
             "**Auto-Recovery**",
