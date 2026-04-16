@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 def create_cli(config: CLIConfig) -> BaseCLI:
     """Create a CLI backend instance based on ``config.provider``."""
     logger.debug("CLI factory creating provider=%s", config.provider)
+    if config.provider == "kimi":
+        from ductor_bot.cli.kimi_provider import KimiCLI
+
+        return KimiCLI(config)
+
     if config.provider == "gemini":
         from ductor_bot.cli.gemini_provider import GeminiCLI
 

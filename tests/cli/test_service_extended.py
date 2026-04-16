@@ -114,3 +114,35 @@ def test_make_cli_passes_gemini_api_key(tmp_path: Path) -> None:
     call_args = mock_create.call_args[0][0]
     assert call_args.provider == "gemini"
     assert call_args.gemini_api_key == "cfg-key-123"
+
+
+def test_make_cli_passes_kimi_cli_parameters(tmp_path: Path) -> None:
+    config = CLIServiceConfig(
+        working_dir=str(tmp_path),
+        default_model="kimi-k2-0905-preview",
+        provider="kimi",
+        max_turns=None,
+        max_budget_usd=None,
+        permission_mode="bypassPermissions",
+        kimi_cli_parameters=("--yolo",),
+    )
+    svc = CLIService(
+        config=config,
+        models=ModelRegistry(),
+        available_providers=frozenset({"kimi"}),
+        process_registry=ProcessRegistry(),
+    )
+    with patch("ductor_bot.cli.service.create_cli") as mock_create:
+        mock_create.return_value = MagicMock()
+        svc._make_cli(
+            AgentRequest(
+                prompt="test",
+                provider_override="kimi",
+                model_override="kimi-k2-0905-preview",
+                chat_id=1,
+            )
+        )
+
+    call_args = mock_create.call_args[0][0]
+    assert call_args.provider == "kimi"
+    assert call_args.cli_parameters == ["--yolo"]

@@ -156,6 +156,7 @@ class CLIParametersConfig(BaseModel):
     claude: list[str] = Field(default_factory=list)
     codex: list[str] = Field(default_factory=list)
     gemini: list[str] = Field(default_factory=list)
+    kimi: list[str] = Field(default_factory=list)
 
 
 class MatrixConfig(BaseModel):
@@ -432,6 +433,7 @@ CLAUDE_MODELS: frozenset[str] = frozenset(CLAUDE_MODELS_ORDERED)
 _GEMINI_ALIASES: frozenset[str] = frozenset({"auto", "pro", "flash", "flash-lite"})
 
 _runtime_gemini: list[frozenset[str]] = [frozenset()]
+_runtime_kimi: list[frozenset[str]] = [frozenset()]
 
 
 class ModelRegistry:
@@ -453,6 +455,8 @@ class ModelRegistry:
             or model_id.startswith(("gemini-", "auto-gemini-"))
         ):
             return "gemini"
+        if model_id in _runtime_kimi[0] or model_id.startswith("kimi-"):
+            return "kimi"
         return "codex"
 
 
@@ -474,3 +478,23 @@ def set_gemini_models(models: frozenset[str]) -> None:
 def reset_gemini_models() -> None:
     """Clear runtime Gemini models. For test teardown only."""
     _runtime_gemini[0] = frozenset()
+
+
+def get_kimi_models() -> frozenset[str]:
+    """Return dynamically discovered Kimi models (may be empty)."""
+    return _runtime_kimi[0]
+
+
+def set_kimi_models(models: frozenset[str]) -> None:
+    """Set runtime Kimi models discovered externally.
+
+    Refuses to overwrite with an empty set to prevent cache wipe.
+    """
+    if not models:
+        return
+    _runtime_kimi[0] = models
+
+
+def reset_kimi_models() -> None:
+    """Clear runtime Kimi models. For test teardown only."""
+    _runtime_kimi[0] = frozenset()

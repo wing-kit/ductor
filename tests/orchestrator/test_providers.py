@@ -84,6 +84,13 @@ class TestResolveSessionDirective:
         assert result[0] == "gemini"
         assert result[1] == ""  # gemini default is empty
 
+    def test_provider_name_kimi(self) -> None:
+        pm = _pm()
+        result = pm.resolve_session_directive("kimi")
+        assert result is not None
+        assert result[0] == "kimi"
+        assert result[1] == ""
+
     def test_provider_name_codex(self) -> None:
         pm = _pm()
         result = pm.resolve_session_directive("codex")
@@ -132,6 +139,10 @@ class TestIsKnownModel:
         pm = _pm()
         assert pm.is_known_model("nonexistent-model") is False
 
+    def test_kimi_model_prefix(self) -> None:
+        pm = _pm()
+        assert pm.is_known_model("kimi-k2-0905-preview") is True
+
     def test_codex_via_cache(self) -> None:
         cache = MagicMock()
         cache.validate_model.return_value = True
@@ -174,6 +185,10 @@ class TestDefaultModelForProvider:
     def test_gemini(self) -> None:
         pm = _pm()
         assert pm.default_model_for_provider("gemini") == ""
+
+    def test_kimi(self) -> None:
+        pm = _pm()
+        assert pm.default_model_for_provider("kimi") == ""
 
     def test_unknown_provider(self) -> None:
         pm = _pm()
@@ -219,7 +234,7 @@ class TestApplyAuthResults:
         auth_status.INSTALLED = "inst"
 
         results = {}
-        for name in ("claude", "codex", "gemini"):
+        for name in ("claude", "codex", "gemini", "kimi"):
             r = MagicMock()
             r.status = "auth"
             r.is_authenticated = True
@@ -230,7 +245,7 @@ class TestApplyAuthResults:
             auth_status_enum=auth_status,
             cli_service=cli_service,
         )
-        assert pm.available_providers == frozenset({"claude", "codex", "gemini"})
+        assert pm.available_providers == frozenset({"claude", "codex", "gemini", "kimi"})
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +265,10 @@ class TestActiveProviderName:
     def test_codex(self) -> None:
         pm = _pm(model="o3-mini", provider="codex")
         assert pm.active_provider_name == "Codex"
+
+    def test_kimi(self) -> None:
+        pm = _pm(model="kimi-k2-0905-preview", provider="kimi")
+        assert pm.active_provider_name == "Kimi"
 
 
 # ---------------------------------------------------------------------------
@@ -271,3 +290,12 @@ class TestOnGeminiModelsRefresh:
         pm._gemini_api_key_mode = True
         pm.on_gemini_models_refresh(("gemini-2.5-pro",))
         assert pm._gemini_api_key_mode is None
+
+
+class TestOnKimiModelsRefresh:
+    def test_updates_known_model_ids(self) -> None:
+        pm = _pm()
+        assert not pm.is_known_model("kimi-k2-0905-preview")
+
+        pm.on_kimi_models_refresh(("kimi-k2-0905-preview",))
+        assert pm.is_known_model("kimi-k2-0905-preview")

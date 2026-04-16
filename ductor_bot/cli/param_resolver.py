@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ductor_bot.cli.codex_cache import CodexModelCache
     from ductor_bot.config import AgentConfig
 
-from ductor_bot.config import _GEMINI_ALIASES, CLAUDE_MODELS, get_gemini_models
+from ductor_bot.config import _GEMINI_ALIASES, CLAUDE_MODELS, get_gemini_models, get_kimi_models
 
 
 def _looks_like_gemini_model(model: str) -> bool:
@@ -29,6 +29,19 @@ def _validate_gemini_model(model: str) -> None:
         msg = (
             f"Invalid Gemini model: {model}. Must use a Gemini model ID "
             "(e.g. gemini-2.5-pro) or Gemini alias."
+        )
+        raise DuctorError(msg)
+
+
+def _validate_kimi_model(model: str) -> None:
+    kimi_models = get_kimi_models()
+    if kimi_models and model not in kimi_models:
+        msg = f"Invalid Kimi model: {model}. Must be one of {sorted(kimi_models)}"
+        raise DuctorError(msg)
+    if not kimi_models and not model.startswith("kimi-"):
+        msg = (
+            f"Invalid Kimi model: {model}. Must use a Kimi model ID "
+            "(e.g. kimi-k2-0905-preview)."
         )
         raise DuctorError(msg)
 
@@ -98,6 +111,8 @@ def resolve_cli_config(
             raise DuctorError(msg)
     elif provider == "gemini":
         _validate_gemini_model(model)
+    elif provider == "kimi":
+        _validate_kimi_model(model)
     else:  # codex
         if codex_cache is None:
             msg = "Codex cache is required for Codex model validation"

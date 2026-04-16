@@ -954,7 +954,7 @@ class TelegramBot:
                 provider_override, model_override = resolved[0], resolved[1] or None
                 prompt = rest
                 # If key was a provider name, check for optional model after it
-                if key in ("claude", "codex", "gemini"):
+                if key in ("claude", "codex", "gemini", "kimi"):
                     model_match = re.match(r"([a-zA-Z][a-zA-Z0-9_.-]*)\s+", prompt)
                     if model_match:
                         candidate = model_match.group(1).lower()
@@ -997,7 +997,12 @@ class TelegramBot:
                 ns = self._orch.get_named_session(chat_id, session_name)
                 provider = ns.provider if ns else (provider_override or self._orch.config.provider)
                 model = ns.model if ns else ""
-                provider_label = {"claude": "Claude", "codex": "Codex", "gemini": "Gemini"}.get(
+                provider_label = {
+                    "claude": "Claude",
+                    "codex": "Codex",
+                    "gemini": "Gemini",
+                    "kimi": "Kimi",
+                }.get(
                     provider, provider
                 )
                 model_info = f" ({model})" if model else ""

@@ -11,6 +11,7 @@ from ductor_bot.cli.auth import (
     check_claude_auth,
     check_codex_auth,
     check_gemini_auth,
+    check_kimi_auth,
     format_age,
     gemini_uses_api_key_mode,
 )
@@ -456,3 +457,39 @@ def test_gemini_uses_api_key_mode_false_for_oauth(
     )
 
     assert gemini_uses_api_key_mode() is False
+
+
+# -- Kimi auth --
+
+
+def test_check_kimi_auth_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ductor_bot.cli.auth as _auth_mod
+
+    monkeypatch.setattr(_auth_mod, "which", lambda _name: None)
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+    result = check_kimi_auth()
+
+    assert result.status == AuthStatus.NOT_FOUND
+
+
+def test_check_kimi_auth_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ductor_bot.cli.auth as _auth_mod
+
+    monkeypatch.setattr(_auth_mod, "which", lambda _name: "/usr/bin/kimi")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+    result = check_kimi_auth()
+
+    assert result.status == AuthStatus.INSTALLED
+
+
+def test_check_kimi_auth_authenticated(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ductor_bot.cli.auth as _auth_mod
+
+    monkeypatch.setattr(_auth_mod, "which", lambda _name: "/usr/bin/kimi")
+    monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
+
+    result = check_kimi_auth()
+
+    assert result.status == AuthStatus.AUTHENTICATED

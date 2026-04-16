@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum, unique
 from pathlib import Path
+from shutil import which
 from typing import TYPE_CHECKING
 
 from ductor_bot.cli.gemini_utils import find_gemini_cli
@@ -195,6 +196,23 @@ def check_gemini_auth() -> AuthResult:
         return result
 
     result = AuthResult("gemini", AuthStatus.INSTALLED)
+    logger.debug("Auth check provider=%s status=%s", result.provider, result.status)
+    return result
+
+
+def check_kimi_auth() -> AuthResult:
+    """Check Kimi CLI auth via executable presence and API key env var."""
+    if which("kimi") is None:
+        result = AuthResult("kimi", AuthStatus.NOT_FOUND)
+        logger.debug("Auth check provider=%s status=%s", result.provider, result.status)
+        return result
+
+    if _has_nonempty_env("KIMI_API_KEY"):
+        result = AuthResult("kimi", AuthStatus.AUTHENTICATED)
+        logger.debug("Auth check provider=%s status=%s (env key)", result.provider, result.status)
+        return result
+
+    result = AuthResult("kimi", AuthStatus.INSTALLED)
     logger.debug("Auth check provider=%s status=%s", result.provider, result.status)
     return result
 
@@ -401,6 +419,7 @@ _CHECKERS: dict[str, Callable[[], AuthResult]] = {
     "claude": check_claude_auth,
     "codex": check_codex_auth,
     "gemini": check_gemini_auth,
+    "kimi": check_kimi_auth,
 }
 
 

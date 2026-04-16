@@ -12,6 +12,7 @@ from ductor_bot.config import (
     StreamingConfig,
     deep_merge_config,
     reset_gemini_models,
+    reset_kimi_models,
 )
 
 # -- AgentConfig defaults --
@@ -20,6 +21,7 @@ from ductor_bot.config import (
 @pytest.fixture(autouse=True)
 def _reset_gemini_models() -> None:
     reset_gemini_models()
+    reset_kimi_models()
 
 
 def test_agent_config_defaults() -> None:
@@ -119,6 +121,12 @@ def test_registry_provider_for_gemini_prefix() -> None:
     reg = ModelRegistry()
     reset_gemini_models()
     assert reg.provider_for("gemini-2.5-pro") == "gemini"
+
+
+def test_registry_provider_for_kimi_prefix() -> None:
+    reg = ModelRegistry()
+    reset_kimi_models()
+    assert reg.provider_for("kimi-k2-0905-preview") == "kimi"
 
 
 def test_streaming_config_fields() -> None:

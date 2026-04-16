@@ -233,7 +233,7 @@ def agents_add(rest: list[str]) -> None:
 
     provider: str | None = questionary.select(
         t_rich("agents.add.prompt_provider"),
-        choices=["claude", "codex", "gemini"],
+        choices=["claude", "codex", "gemini", "kimi"],
         default="claude",
     ).ask()
     if provider is None:

@@ -21,6 +21,7 @@ def _make_service(**overrides: Any) -> CLIService:
         max_turns=overrides.pop("max_turns", None),
         max_budget_usd=overrides.pop("max_budget_usd", None),
         permission_mode=overrides.pop("permission_mode", "bypassPermissions"),
+        kimi_cli_parameters=overrides.pop("kimi_cli_parameters", ()),
     )
     models = ModelRegistry()
 
@@ -129,3 +130,21 @@ def test_update_available_providers() -> None:
     svc = _make_service()
     svc.update_available_providers(frozenset({"claude", "codex"}))
     assert svc._available_providers == frozenset({"claude", "codex"})
+
+
+def test_cli_parameters_for_kimi_provider() -> None:
+    cfg = CLIServiceConfig(
+        working_dir="/tmp",
+        default_model="opus",
+        provider="claude",
+        max_turns=None,
+        max_budget_usd=None,
+        permission_mode="bypassPermissions",
+        kimi_cli_parameters=("--yolo",),
+    )
+    assert cfg.cli_parameters_for_provider("kimi") == ["--yolo"]
+
+
+def test_cli_parameters_for_kimi() -> None:
+    svc = _make_service(kimi_cli_parameters=("--yolo",))
+    assert svc._config.cli_parameters_for_provider("kimi") == ["--yolo"]

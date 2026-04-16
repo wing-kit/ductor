@@ -201,3 +201,23 @@ def test_resolve_gemini_fallback_prefix_when_no_discovery(
 
     assert result.provider == "gemini"
     assert result.model == "gemini-foo"
+
+
+def test_resolve_kimi_fallback_prefix_when_no_discovery(
+    base_config: AgentConfig, codex_cache: CodexModelCache
+) -> None:
+    overrides = TaskOverrides(provider="kimi", model="kimi-k2-0905-preview")
+
+    result = resolve_cli_config(base_config, codex_cache, task_overrides=overrides)
+
+    assert result.provider == "kimi"
+    assert result.model == "kimi-k2-0905-preview"
+
+
+def test_resolve_kimi_invalid_without_prefix(
+    base_config: AgentConfig, codex_cache: CodexModelCache
+) -> None:
+    overrides = TaskOverrides(provider="kimi", model="not-kimi")
+
+    with pytest.raises(DuctorError, match="Invalid Kimi model"):
+        resolve_cli_config(base_config, codex_cache, task_overrides=overrides)

@@ -73,6 +73,7 @@ def test_create_cron_task_only_claude_md_when_no_parent_rules(tmp_path: Path) ->
     assert (task_path / "CLAUDE.md").exists()
     assert not (task_path / "AGENTS.md").exists()
     assert not (task_path / "GEMINI.md").exists()
+    assert not (task_path / "KIMI.md").exists()
 
 
 def test_create_cron_task_mirrors_parent_rule_files(tmp_path: Path) -> None:
@@ -82,15 +83,19 @@ def test_create_cron_task_mirrors_parent_rule_files(tmp_path: Path) -> None:
     (paths.cron_tasks_dir / "CLAUDE.md").write_text("parent")
     (paths.cron_tasks_dir / "AGENTS.md").write_text("parent")
     (paths.cron_tasks_dir / "GEMINI.md").write_text("parent")
+    (paths.cron_tasks_dir / "KIMI.md").write_text("parent")
     task_path = create_cron_task(paths, "my-feature", "My Feature", "Build the login page")
     claude_md = task_path / "CLAUDE.md"
     agents_md = task_path / "AGENTS.md"
     gemini_md = task_path / "GEMINI.md"
+    kimi_md = task_path / "KIMI.md"
     assert claude_md.exists()
     assert agents_md.exists()
     assert gemini_md.exists()
+    assert kimi_md.exists()
     assert agents_md.read_text() == claude_md.read_text()
     assert gemini_md.read_text() == claude_md.read_text()
+    assert kimi_md.read_text() == claude_md.read_text()
 
 
 def test_create_cron_task_only_gemini_when_parent_has_gemini(tmp_path: Path) -> None:
@@ -112,6 +117,18 @@ def test_create_cron_task_claude_and_codex_from_parent(tmp_path: Path) -> None:
     assert (task_path / "CLAUDE.md").exists()
     assert (task_path / "AGENTS.md").exists()
     assert not (task_path / "GEMINI.md").exists()
+    assert not (task_path / "KIMI.md").exists()
+
+
+def test_create_cron_task_only_kimi_when_parent_has_kimi(tmp_path: Path) -> None:
+    """When only Kimi is authenticated, only KIMI.md is created."""
+    paths = _make_paths(tmp_path)
+    (paths.cron_tasks_dir / "KIMI.md").write_text("parent")
+    task_path = create_cron_task(paths, "my-feature", "My Feature", "desc")
+    assert not (task_path / "CLAUDE.md").exists()
+    assert not (task_path / "AGENTS.md").exists()
+    assert not (task_path / "GEMINI.md").exists()
+    assert (task_path / "KIMI.md").exists()
 
 
 def test_create_cron_task_creates_scripts_dir(tmp_path: Path) -> None:
@@ -182,7 +199,7 @@ def test_ensure_adds_missing_gemini_md(tmp_path: Path) -> None:
 
 
 def test_ensure_adds_multiple_missing_files(tmp_path: Path) -> None:
-    """Task with only CLAUDE.md gets AGENTS.md + GEMINI.md when parent has all three."""
+    """Task with only CLAUDE.md gets all missing provider rule files."""
     paths = _make_paths(tmp_path)
     task_dir = paths.cron_tasks_dir / "legacy-task"
     task_dir.mkdir()
@@ -191,11 +208,13 @@ def test_ensure_adds_multiple_missing_files(tmp_path: Path) -> None:
     (paths.cron_tasks_dir / "CLAUDE.md").write_text("parent")
     (paths.cron_tasks_dir / "AGENTS.md").write_text("parent")
     (paths.cron_tasks_dir / "GEMINI.md").write_text("parent")
+    (paths.cron_tasks_dir / "KIMI.md").write_text("parent")
 
     created = ensure_task_rule_files(paths.cron_tasks_dir)
-    assert created == 2
+    assert created == 3
     assert (task_dir / "AGENTS.md").read_text() == "rule content"
     assert (task_dir / "GEMINI.md").read_text() == "rule content"
+    assert (task_dir / "KIMI.md").read_text() == "rule content"
 
 
 def test_ensure_noop_when_all_present(tmp_path: Path) -> None:
@@ -219,15 +238,17 @@ def test_ensure_never_removes_files(tmp_path: Path) -> None:
     (task_dir / "CLAUDE.md").write_text("rule content")
     (task_dir / "AGENTS.md").write_text("rule content")
     (task_dir / "GEMINI.md").write_text("rule content")
+    (task_dir / "KIMI.md").write_text("rule content")
 
     # Parent only has CLAUDE.md (Codex + Gemini de-authenticated)
     (paths.cron_tasks_dir / "CLAUDE.md").write_text("parent")
 
     ensure_task_rule_files(paths.cron_tasks_dir)
-    # All three still exist in task folder
+    # All provider rule files still exist in task folder
     assert (task_dir / "CLAUDE.md").exists()
     assert (task_dir / "AGENTS.md").exists()
     assert (task_dir / "GEMINI.md").exists()
+    assert (task_dir / "KIMI.md").exists()
 
 
 def test_ensure_skips_non_task_dirs(tmp_path: Path) -> None:
@@ -253,10 +274,11 @@ def test_ensure_idempotent(tmp_path: Path) -> None:
     (task_dir / "CLAUDE.md").write_text("rule content")
     (paths.cron_tasks_dir / "CLAUDE.md").write_text("parent")
     (paths.cron_tasks_dir / "GEMINI.md").write_text("parent")
+    (paths.cron_tasks_dir / "KIMI.md").write_text("parent")
 
     first = ensure_task_rule_files(paths.cron_tasks_dir)
     second = ensure_task_rule_files(paths.cron_tasks_dir)
-    assert first == 1
+    assert first == 2
     assert second == 0
 
 

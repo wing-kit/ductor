@@ -11,7 +11,9 @@ from ductor_bot.config import (
     CLAUDE_MODELS,
     ModelRegistry,
     get_gemini_models,
+    get_kimi_models,
     set_gemini_models,
+    set_kimi_models,
 )
 
 if TYPE_CHECKING:
@@ -73,6 +75,8 @@ class ProviderManager:
             return "Claude Code"
         if provider == "gemini":
             return "Gemini"
+        if provider == "kimi":
+            return "Kimi"
         return "Codex"
 
     # -- Auth / init ----------------------------------------------------------
@@ -119,9 +123,16 @@ class ProviderManager:
         self.refresh_known_model_ids()
         self._gemini_api_key_mode = None  # Invalidate to re-check on next access
 
+    def on_kimi_models_refresh(self, models: tuple[str, ...]) -> None:
+        """Callback for Kimi model refresh: update model registry."""
+        set_kimi_models(frozenset(models))
+        self.refresh_known_model_ids()
+
     def refresh_known_model_ids(self) -> None:
         """Refresh directive-known model IDs from dynamic provider registries."""
-        self._known_model_ids = CLAUDE_MODELS | _GEMINI_ALIASES | get_gemini_models()
+        self._known_model_ids = (
+            CLAUDE_MODELS | _GEMINI_ALIASES | get_gemini_models() | get_kimi_models()
+        )
 
     def resolve_runtime_target(self, requested_model: str | None = None) -> tuple[str, str]:
         """Resolve requested model to the effective ``(model, provider)`` pair."""
@@ -148,6 +159,8 @@ class ProviderManager:
             return ""
         if provider == "gemini":
             return ""
+        if provider == "kimi":
+            return ""
         return ""
 
     def resolve_session_directive(self, key: str) -> tuple[str, str] | None:
@@ -158,7 +171,7 @@ class ProviderManager:
         - known model   (``@opus``)  -> (inferred_provider, model)
         - unknown                    -> None
         """
-        if key in ("claude", "codex", "gemini"):
+        if key in ("claude", "codex", "gemini", "kimi"):
             return key, self.default_model_for_provider(key)
         if self.is_known_model(key):
             provider = self._models.provider_for(key)
@@ -178,6 +191,7 @@ class ProviderManager:
         provider_meta: dict[str, tuple[str, str]] = {
             "claude": ("Claude Code", "#F97316"),
             "gemini": ("Gemini", "#8B5CF6"),
+            "kimi": ("Kimi", "#06B6D4"),
             "codex": ("Codex", "#10B981"),
         }
         providers: list[dict[str, object]] = []
@@ -189,6 +203,8 @@ class ProviderManager:
             elif pid == "gemini":
                 gemini = get_gemini_models()
                 models = sorted(gemini) if gemini else sorted(_GEMINI_ALIASES)
+            elif pid == "kimi":
+                models = sorted(get_kimi_models())
             elif pid == "codex":
                 cache = codex_cache_obs.get_cache() if codex_cache_obs else None
                 models = [m.id for m in cache.models] if cache and cache.models else []
