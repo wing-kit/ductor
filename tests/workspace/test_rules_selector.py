@@ -39,6 +39,7 @@ def mock_paths(tmp_path: Path) -> DuctorPaths:
     paths = MagicMock(spec=DuctorPaths)
     paths.home_defaults = home_defaults
     paths.ductor_home = ductor_home
+    paths.config_path = ductor_home / "config" / "config.json"
 
     return paths
 

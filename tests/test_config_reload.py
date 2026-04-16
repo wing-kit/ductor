@@ -91,9 +91,17 @@ class TestClassifyChanges:
 
 class TestConfigReloader:
     def _write_config(self, path: Path, **overrides: Any) -> AgentConfig:
+        import os
+
+        previous_mtime = path.stat().st_mtime if path.exists() else None
         cfg = _make_config(**overrides)
         data = cfg.model_dump(mode="json")
         path.write_text(json.dumps(data), encoding="utf-8")
+        if previous_mtime is not None:
+            current_mtime = path.stat().st_mtime
+            if current_mtime <= previous_mtime:
+                bumped = previous_mtime + 1.0
+                os.utime(path, (bumped, bumped))
         return cfg
 
     async def test_no_change_no_callback(self, tmp_path: Path) -> None:
@@ -107,6 +115,8 @@ class TestConfigReloader:
         on_hot.assert_not_called()
 
     async def test_detects_change_and_calls_hot_reload(self, tmp_path: Path) -> None:
+        import os
+
         config_path = tmp_path / "config.json"
         cfg = self._write_config(config_path, model="sonnet")
 
@@ -115,6 +125,8 @@ class TestConfigReloader:
 
         # Mutate the file
         self._write_config(config_path, model="opus")
+        now = config_path.stat().st_mtime + 1.0
+        os.utime(config_path, (now, now))
 
         await reloader._check()
         on_hot.assert_called_once()
@@ -123,6 +135,8 @@ class TestConfigReloader:
         assert "model" in call_hot
 
     async def test_restart_callback(self, tmp_path: Path) -> None:
+        import os
+
         config_path = tmp_path / "config.json"
         cfg = self._write_config(config_path)
 
@@ -132,6 +146,8 @@ class TestConfigReloader:
         new_data = cfg.model_dump(mode="json")
         new_data["telegram_token"] = "new-token-value"
         config_path.write_text(json.dumps(new_data), encoding="utf-8")
+        now = config_path.stat().st_mtime + 1.0
+        os.utime(config_path, (now, now))
 
         await reloader._check()
         on_restart.assert_called_once()
@@ -222,3 +238,19 @@ class TestConfigReloader:
 
         await reloader._check()
         on_hot.assert_not_called()
+
+    async def test_detects_change_when_mtime_updates(self, tmp_path: Path) -> None:
+        import os
+
+        config_path = tmp_path / "config.json"
+        cfg = self._write_config(config_path, model="sonnet")
+
+        on_hot = MagicMock()
+        reloader = ConfigReloader(config_path, cfg, on_hot_reload=on_hot)
+
+        self._write_config(config_path, model="opus")
+        now = config_path.stat().st_mtime + 1.0
+        os.utime(config_path, (now, now))
+
+        await reloader._check()
+        on_hot.assert_called_once()

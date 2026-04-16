@@ -70,7 +70,7 @@ class RulesSelector:
             return frozenset()
         try:
             data = json.loads(config_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, TypeError):
             return frozenset()
         if not isinstance(data, dict):
             return frozenset()
