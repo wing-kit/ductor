@@ -1,6 +1,6 @@
 # ductor Docs
 
-ductor routes chat input to official provider CLIs (`claude`, `codex`, `gemini`), streams responses back via Telegram or Matrix, persists session state, and runs cron/heartbeat/webhook/cleanup automation in-process. It also supports a direct WebSocket API transport with authenticated file upload/download.
+ductor routes chat input to official provider CLIs (`claude`, `codex`, `gemini`, `kimi`), streams responses back via Telegram or Matrix, persists session state, and runs cron/heartbeat/webhook/cleanup automation in-process. It also supports a direct WebSocket API transport with authenticated file upload/download.
 
 ## Onboarding (Read in This Order)
 
@@ -55,6 +55,7 @@ Runtime behavior notes:
 - [System Overview](system_overview.md)
 - [Installation](installation.md)
 - [Matrix Setup](matrix-setup.md)
+- [中文文件（繁體）](zh-TW/README.md)
 - [Automation Quickstart](automation.md)
 - [Developer Quickstart](developer_quickstart.md)
 - [Configuration](config.md)

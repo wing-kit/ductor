@@ -15,6 +15,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick start</a> &middot;
+  <a href="docs/zh-TW/README.md">中文文件</a> &middot;
   <a href="#how-chats-work">How chats work</a> &middot;
   <a href="#commands">Commands</a> &middot;
   <a href="docs/README.md">Docs</a> &middot;
