@@ -230,6 +230,7 @@ no_auth = "Geen geauthenticeerde providers gevonden.\nVoer `claude auth`, `codex
 pick_provider = "Kies een provider:"
 select_claude = "Selecteer Claude-model:"
 select_gemini = "Selecteer Gemini-model:"
+select_kimi = "Selecteer Kimi-model:"
 select_codex = "Selecteer Codex-model:"
 no_codex = "Geen Codex-modellen beschikbaar."
 no_gemini = "Geen Gemini-modellen gevonden uit lokale Gemini CLI-bestanden."

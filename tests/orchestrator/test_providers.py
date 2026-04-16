@@ -295,7 +295,8 @@ class TestOnGeminiModelsRefresh:
 class TestOnKimiModelsRefresh:
     def test_updates_known_model_ids(self) -> None:
         pm = _pm()
-        assert not pm.is_known_model("kimi-k2-0905-preview")
+        dynamic_model = "moonshot-v1-8k"
+        assert not pm.is_known_model(dynamic_model)
 
-        pm.on_kimi_models_refresh(("kimi-k2-0905-preview",))
-        assert pm.is_known_model("kimi-k2-0905-preview")
+        pm.on_kimi_models_refresh((dynamic_model,))
+        assert pm.is_known_model(dynamic_model)

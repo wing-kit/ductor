@@ -230,6 +230,7 @@ no_auth = "Nenhum provider autenticado encontrado.\nExecute `claude auth`, `code
 pick_provider = "Escolha um provider:"
 select_claude = "Selecione o modelo Claude:"
 select_gemini = "Selecione o modelo Gemini:"
+select_kimi = "Selecione o modelo Kimi:"
 select_codex = "Selecione o modelo Codex:"
 no_codex = "Nenhum modelo Codex disponível."
 no_gemini = "Nenhum modelo Gemini descoberto nos arquivos locais do Gemini CLI."

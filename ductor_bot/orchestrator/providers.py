@@ -143,6 +143,8 @@ class ProviderManager:
         """Return True if *candidate* is a recognized model ID for any provider."""
         if candidate in self._known_model_ids:
             return True
+        if candidate == "kimi-auto" or candidate.startswith("kimi-"):
+            return True
         codex = self._codex_cache_fn() if self._codex_cache_fn else None
         return bool(codex and codex.validate_model(candidate))
 

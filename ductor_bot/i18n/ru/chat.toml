@@ -230,6 +230,7 @@ no_auth = "Не найдено ни одного авторизованного 
 pick_provider = "Выбери провайдера:"
 select_claude = "Выбери модель Claude:"
 select_gemini = "Выбери модель Gemini:"
+select_kimi = "Выбери модель Kimi:"
 select_codex = "Выбери модель Codex:"
 no_codex = "Нет доступных моделей Codex."
 no_gemini = "Модели Gemini не обнаружены в локальных файлах CLI."
