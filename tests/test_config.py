@@ -144,7 +144,7 @@ def test_registry_provider_for_kimi_prefix() -> None:
 
 
 def test_default_kimi_model_constant() -> None:
-    assert DEFAULT_KIMI_MODEL == "kimi-for-coding"
+    assert DEFAULT_KIMI_MODEL == "kimi-code/kimi-for-coding"
 
 
 def test_streaming_config_fields() -> None:

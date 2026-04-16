@@ -38,11 +38,12 @@ def test_check_all_auth_returns_all(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert "kimi" in results
 
 
-def test_check_kimi_auth_installed_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_kimi_auth_installed_without_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import ductor_bot.cli.auth as _auth_mod
 
     monkeypatch.setattr(_auth_mod, "which", lambda _: "/usr/bin/kimi")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     result = check_kimi_auth()
     assert result.status == AuthStatus.INSTALLED
 
