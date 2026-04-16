@@ -6,15 +6,23 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ductor_bot.config import AgentConfig, reset_gemini_models, set_gemini_models
+from ductor_bot.config import (
+    DEFAULT_KIMI_MODEL,
+    AgentConfig,
+    reset_gemini_models,
+    reset_kimi_models,
+    set_gemini_models,
+)
 from ductor_bot.orchestrator.providers import ProviderManager
 
 
 @pytest.fixture(autouse=True)
 def _reset_gemini():
     reset_gemini_models()
+    reset_kimi_models()
     yield
     reset_gemini_models()
+    reset_kimi_models()
 
 
 def _pm(
@@ -89,7 +97,7 @@ class TestResolveSessionDirective:
         result = pm.resolve_session_directive("kimi")
         assert result is not None
         assert result[0] == "kimi"
-        assert result[1] == ""
+        assert result[1] == DEFAULT_KIMI_MODEL
 
     def test_provider_name_codex(self) -> None:
         pm = _pm()
@@ -188,7 +196,7 @@ class TestDefaultModelForProvider:
 
     def test_kimi(self) -> None:
         pm = _pm()
-        assert pm.default_model_for_provider("kimi") == ""
+        assert pm.default_model_for_provider("kimi") == DEFAULT_KIMI_MODEL
 
     def test_unknown_provider(self) -> None:
         pm = _pm()
@@ -246,6 +254,30 @@ class TestApplyAuthResults:
             cli_service=cli_service,
         )
         assert pm.available_providers == frozenset({"claude", "codex", "gemini", "kimi"})
+
+    def test_excludes_disabled_providers(self) -> None:
+        cfg = AgentConfig(disabled_providers=["gemini"])
+        pm = ProviderManager(cfg)
+        cli_service = MagicMock()
+
+        auth_status = MagicMock()
+        auth_status.AUTHENTICATED = "auth"
+        auth_status.INSTALLED = "inst"
+
+        results = {}
+        for name in ("claude", "gemini"):
+            r = MagicMock()
+            r.status = "auth"
+            r.is_authenticated = True
+            results[name] = r
+
+        pm.apply_auth_results(
+            results,
+            auth_status_enum=auth_status,
+            cli_service=cli_service,
+        )
+        assert pm.available_providers == frozenset({"claude"})
+        cli_service.update_available_providers.assert_called_once_with(frozenset({"claude"}))
 
 
 # ---------------------------------------------------------------------------

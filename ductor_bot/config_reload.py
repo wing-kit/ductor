@@ -58,6 +58,7 @@ _HOT_RELOADABLE: frozenset[str] = frozenset(
         "scene",
         "image",
         "language",
+        "disabled_providers",
     }
 )
 

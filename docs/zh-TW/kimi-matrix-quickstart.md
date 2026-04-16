@@ -50,7 +50,7 @@ pip install "ductor[matrix]"
 {
   "transport": "matrix",
   "provider": "kimi",
-  "model": "kimi-auto",
+  "model": "kimi-for-coding",
   "matrix": {
     "homeserver": "https://matrix-client.matrix.org",
     "user_id": "@my_ductor_bot:matrix.org",
@@ -64,7 +64,7 @@ pip install "ductor[matrix]"
 
 說明：
 - `provider: "kimi"`：預設走 Kimi CLI
-- `model: "kimi-auto"`：建議先用自動路由
+- `model: "kimi-for-coding"`：Kimi 預設程式碼模型
 - `allowed_users`：建議先鎖定你自己的 Matrix 帳號
 
 ---
@@ -77,7 +77,7 @@ pip install "ductor[matrix]"
 {
   "transports": ["telegram", "matrix"],
   "provider": "kimi",
-  "model": "kimi-auto",
+  "model": "kimi-for-coding",
   "telegram_token": "YOUR_TELEGRAM_TOKEN",
   "allowed_user_ids": [123456789],
   "matrix": {

@@ -4,6 +4,7 @@
     "log_level": "INFO",
     "provider": "claude",
     "model": "sonnet",
+    "disabled_providers": [],
     "language": "en",
     "ductor_home": "~/.ductor",
     "user_timezone": "Europe/Berlin",

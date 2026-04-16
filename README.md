@@ -223,6 +223,11 @@ Both transports can run **in parallel** on the same agent:
 {"transports": ["telegram", "matrix"]}
 ```
 
+Provider toggles:
+
+- Use `disabled_providers` in `config.json` to explicitly disable providers even when they are installed/authenticated.
+- Example: `"disabled_providers": ["gemini", "kimi"]`
+
 ### Plugin system for additional messengers
 
 Each messenger is a self-contained module under `messenger/<name>/` implementing a

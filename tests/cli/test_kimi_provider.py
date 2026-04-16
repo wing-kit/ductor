@@ -37,20 +37,20 @@ def _make_cli(monkeypatch: pytest.MonkeyPatch, **overrides: Any) -> KimiCLI:
 
 def test_build_command_has_stream_json(monkeypatch: pytest.MonkeyPatch) -> None:
     cli = _make_cli(monkeypatch)
-    cmd, sid = cli._build_command("hello", resume_session=None, continue_session=False, streaming=True)
+    cmd, sid = cli._build_command("hello", resume_session=None, continue_session=False)
     assert cmd[0] == "/usr/bin/kimi"
     assert "--print" in cmd
     assert "--output-format" in cmd
     fmt_idx = cmd.index("--output-format")
     assert cmd[fmt_idx + 1] == "stream-json"
     assert "--model" in cmd
-    assert sid is not None
-    assert "--resume" in cmd
+    assert sid is None
+    assert "--resume" not in cmd
 
 
 def test_build_command_continue_without_resume(monkeypatch: pytest.MonkeyPatch) -> None:
     cli = _make_cli(monkeypatch)
-    cmd, sid = cli._build_command("hello", resume_session=None, continue_session=True, streaming=False)
+    cmd, sid = cli._build_command("hello", resume_session=None, continue_session=True)
     assert "--continue" in cmd
     assert "--resume" not in cmd
     assert sid is None
@@ -58,10 +58,17 @@ def test_build_command_continue_without_resume(monkeypatch: pytest.MonkeyPatch) 
 
 def test_build_command_uses_given_resume(monkeypatch: pytest.MonkeyPatch) -> None:
     cli = _make_cli(monkeypatch)
-    cmd, sid = cli._build_command("hello", resume_session="abc-123", continue_session=False, streaming=False)
+    cmd, sid = cli._build_command("hello", resume_session="abc-123", continue_session=False)
     assert sid == "abc-123"
     idx = cmd.index("--resume")
     assert cmd[idx + 1] == "abc-123"
+
+
+def test_parse_response_extracts_resume_session_id_from_stderr_hint() -> None:
+    stderr = b"To resume this session: kimi -r ductor-123-0-abcde"
+    resp = _parse_response(b"", stderr, 1, fallback_session_id=None)
+    assert resp.session_id == "ductor-123-0-abcde"
+    assert resp.is_error is True
 
 
 def test_compose_prompt_includes_system_context(monkeypatch: pytest.MonkeyPatch) -> None:

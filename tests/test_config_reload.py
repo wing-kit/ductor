@@ -56,10 +56,15 @@ class TestDiffConfigs:
 
 class TestClassifyChanges:
     def test_hot_reloadable(self) -> None:
-        changes = {"model": ("sonnet", "opus"), "reasoning_effort": ("low", "high")}
+        changes = {
+            "model": ("sonnet", "opus"),
+            "reasoning_effort": ("low", "high"),
+            "disabled_providers": ([], ["gemini"]),
+        }
         hot, restart = classify_changes(changes)
         assert "model" in hot
         assert "reasoning_effort" in hot
+        assert "disabled_providers" in hot
         assert restart == []
 
     def test_restart_required(self) -> None:

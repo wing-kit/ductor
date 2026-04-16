@@ -324,6 +324,8 @@ async def _build_status(orch: Orchestrator, key: SessionKey) -> str:
     auth = await asyncio.to_thread(check_all_auth)
     auth_lines: list[str] = []
     for provider, result in auth.items():
+        if orch.config.is_provider_disabled(provider):
+            continue
         age_label = f" ({result.age_human})" if result.age_human else ""
         auth_lines.append(f"  [{provider}] {result.status.value}{age_label}")
     auth_block = t("status.auth_header") + "\n" + "\n".join(auth_lines)

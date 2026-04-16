@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ductor_bot.config import (
+    DEFAULT_KIMI_MODEL,
     _GEMINI_ALIASES,
     CLAUDE_MODELS,
     ModelRegistry,
@@ -101,7 +102,9 @@ class ProviderManager:
                 logger.info("Provider [%s]: not found", provider)
 
         self._available_providers = frozenset(
-            name for name, res in auth_results.items() if res.is_authenticated
+            name
+            for name, res in auth_results.items()
+            if res.is_authenticated and not self._config.is_provider_disabled(name)
         )
         cli_service.update_available_providers(self._available_providers)
 
@@ -162,7 +165,7 @@ class ProviderManager:
         if provider == "gemini":
             return ""
         if provider == "kimi":
-            return ""
+            return DEFAULT_KIMI_MODEL
         return ""
 
     def resolve_session_directive(self, key: str) -> tuple[str, str] | None:
@@ -206,7 +209,8 @@ class ProviderManager:
                 gemini = get_gemini_models()
                 models = sorted(gemini) if gemini else sorted(_GEMINI_ALIASES)
             elif pid == "kimi":
-                models = sorted(get_kimi_models())
+                kimi_models = get_kimi_models()
+                models = sorted(kimi_models) if kimi_models else [DEFAULT_KIMI_MODEL]
             elif pid == "codex":
                 cache = codex_cache_obs.get_cache() if codex_cache_obs else None
                 models = [m.id for m in cache.models] if cache and cache.models else []

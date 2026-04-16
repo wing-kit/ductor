@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from ductor_bot.config import (
+    DEFAULT_KIMI_MODEL,
     AgentConfig,
     DockerConfig,
     ModelRegistry,
@@ -35,6 +36,7 @@ def test_agent_config_defaults() -> None:
     assert cfg.gemini_api_key is None
     assert cfg.telegram_token == ""
     assert cfg.allowed_user_ids == []
+    assert cfg.disabled_providers == []
 
 
 def test_agent_config_normalizes_nullish_gemini_api_key() -> None:
@@ -59,6 +61,18 @@ def test_agent_config_docker_defaults() -> None:
 def test_agent_config_rejects_invalid_types() -> None:
     with pytest.raises(ValidationError, match="idle_timeout_minutes"):
         AgentConfig(idle_timeout_minutes="not_a_number")  # type: ignore[arg-type]
+
+
+def test_agent_config_normalizes_disabled_providers() -> None:
+    cfg = AgentConfig(disabled_providers=[" KIMI ", "gemini", "kimi"])
+    assert cfg.disabled_providers == ["kimi", "gemini"]
+    assert cfg.is_provider_disabled("kimi") is True
+    assert cfg.is_provider_disabled("codex") is False
+
+
+def test_agent_config_rejects_unknown_disabled_provider() -> None:
+    with pytest.raises(ValidationError, match="Unknown provider in disabled_providers"):
+        AgentConfig(disabled_providers=["unknown"])
 
 
 # -- deep_merge_config --
@@ -127,6 +141,10 @@ def test_registry_provider_for_kimi_prefix() -> None:
     reg = ModelRegistry()
     reset_kimi_models()
     assert reg.provider_for("kimi-k2-0905-preview") == "kimi"
+
+
+def test_default_kimi_model_constant() -> None:
+    assert DEFAULT_KIMI_MODEL == "kimi-for-coding"
 
 
 def test_streaming_config_fields() -> None:

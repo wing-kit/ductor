@@ -123,10 +123,14 @@ def _build_auth_block(auth_results: dict[str, AuthResult], config: AgentConfig) 
     gemini = auth_results.get("gemini")
     kimi = auth_results.get("kimi")
 
-    claude_ok = claude is not None and claude.is_authenticated
-    codex_ok = codex is not None and codex.is_authenticated
-    gemini_ok = gemini is not None and gemini.is_authenticated
-    kimi_ok = kimi is not None and kimi.is_authenticated
+    claude_ok = (
+        claude is not None and claude.is_authenticated and not config.is_provider_disabled("claude")
+    )
+    codex_ok = codex is not None and codex.is_authenticated and not config.is_provider_disabled("codex")
+    gemini_ok = (
+        gemini is not None and gemini.is_authenticated and not config.is_provider_disabled("gemini")
+    )
+    kimi_ok = kimi is not None and kimi.is_authenticated and not config.is_provider_disabled("kimi")
 
     providers: list[str] = []
     if claude_ok:
