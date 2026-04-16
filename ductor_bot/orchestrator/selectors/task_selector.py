@@ -49,7 +49,7 @@ async def handle_task_callback(
 
     if action == "cancelall":
         count = await hub.cancel_all(chat_id)
-        note = t_plural("tasks.cancelled", count, count=count) if count else t("tasks.no_running")
+        note = t_plural("tasks.cancelled", count) if count else t("tasks.no_running")
         return _build_page(hub, chat_id, note=note)
 
     if action.startswith("cancel:"):
@@ -63,7 +63,7 @@ async def handle_task_callback(
     if action == "cleanup":
         count = hub.registry.cleanup_finished(chat_id)
         note = (
-            t_plural("tasks.cleaned", count, count=count) if count else t("tasks.nothing_to_clean")
+            t_plural("tasks.cleaned", count) if count else t("tasks.nothing_to_clean")
         )
         return _build_page(hub, chat_id, note=note)
 
