@@ -313,6 +313,20 @@ def test_sync_ductor_to_all_three(tmp_path: Path) -> None:
         assert link.resolve() == (paths.skills_dir / "from-ductor").resolve()
 
 
+def test_sync_kimi_to_ductor(tmp_path: Path) -> None:
+    paths, _, _ = _setup_three_dirs(tmp_path)
+    kimi_home = tmp_path / "fake_home" / ".kimi"
+    kimi_home.mkdir(parents=True)
+    kimi_skills = kimi_home / "skills"
+    _make_skill(kimi_skills, "from-kimi")
+    with patch("ductor_bot.workspace.skill_sync._cli_skill_dirs") as mock:
+        mock.return_value = {"kimi": kimi_skills}
+        sync_skills(paths)
+    link = paths.skills_dir / "from-kimi"
+    assert link.is_symlink()
+    assert link.resolve() == (kimi_skills / "from-kimi").resolve()
+
+
 def test_sync_no_providers(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path)
     paths.skills_dir.mkdir(parents=True)

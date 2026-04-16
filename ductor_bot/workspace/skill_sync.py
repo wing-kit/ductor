@@ -313,7 +313,7 @@ def sync_skills(paths: DuctorPaths, *, docker_active: bool = False) -> None:
         all_names.update(reg.keys())
 
     # Priority order: ductor > claude > codex > gemini
-    priority = ("ductor", "claude", "codex", "gemini")
+    priority = ("ductor", "claude", "codex", "gemini", "kimi")
     for skill_name in sorted(all_names):
         canonical = _resolve_canonical(
             skill_name,

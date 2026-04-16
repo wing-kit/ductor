@@ -131,7 +131,8 @@
     "cli_parameters": {
         "claude": ["--verbose", "--chrome"],
         "codex": [],
-        "gemini": []
+        "gemini": [],
+        "kimi": []
     },
 
     "image": {

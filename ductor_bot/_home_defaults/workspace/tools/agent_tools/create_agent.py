@@ -166,7 +166,7 @@ def main() -> None:
     )
 
     # Common
-    parser.add_argument("--provider", default=None, help="AI provider (claude/openai/gemini)")
+    parser.add_argument("--provider", default=None, help="AI provider (claude/openai/gemini/kimi)")
     parser.add_argument(
         "--model",
         default=None,

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Files that are ALWAYS overwritten on every start (Zone 2).
 # Everything else is seeded only once (Zone 3).
-_ZONE2_FILES = frozenset({"CLAUDE.md", "AGENTS.md", "GEMINI.md"})
+_ZONE2_FILES = frozenset({"CLAUDE.md", "AGENTS.md", "GEMINI.md", "KIMI.md"})
 
 # Directories where ALL .py files are Zone 2 (framework-managed).
 # User-owned scripts should go in tools/user_tools/ (Zone 3).
@@ -39,6 +39,7 @@ _SKIP_FILES = frozenset(
         "RULES-claude-only.md",
         "RULES-codex-only.md",
         "RULES-gemini-only.md",
+        "RULES-kimi-only.md",
         "RULES-all-clis.md",
         "RULES.md",  # Static templates also handled by RulesSelector
     }
@@ -102,9 +103,9 @@ def _handle_zone2_file(entry: Path, target: Path, dst: Path) -> None:
     """Handle Zone 2 file copy (always overwrite) and mirror creation."""
     _copy_with_symlink_check(entry, target)
     logger.debug("Zone 2 copy: %s", target)
-    # Auto-create mirrors for every CLAUDE.md (AGENTS.md + GEMINI.md)
+    # Auto-create mirrors for every CLAUDE.md (AGENTS.md + GEMINI.md + KIMI.md)
     if entry.name == "CLAUDE.md":
-        for mirror_name in ("AGENTS.md", "GEMINI.md"):
+        for mirror_name in ("AGENTS.md", "GEMINI.md", "KIMI.md"):
             mirror_target = dst / mirror_name
             _copy_with_symlink_check(entry, mirror_target)
             logger.debug("Zone 2 copy: %s", mirror_target)
@@ -152,15 +153,15 @@ def _walk_and_copy(src: Path, dst: Path, root_src: Path | None = None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rule file sync (CLAUDE.md <-> AGENTS.md)
+# Rule file sync (CLAUDE.md <-> AGENTS.md <-> GEMINI.md <-> KIMI.md)
 # ---------------------------------------------------------------------------
 
 
-_RULE_FILE_NAMES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md")
+_RULE_FILE_NAMES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md", "KIMI.md")
 
 
 def sync_rule_files(root: Path) -> None:
-    """Recursively sync CLAUDE.md <-> AGENTS.md <-> GEMINI.md by mtime.
+    """Recursively sync CLAUDE.md <-> AGENTS.md <-> GEMINI.md <-> KIMI.md by mtime.
 
     For each directory under root (including root itself):
     - Find the newest rule file among the three by mtime.
@@ -179,7 +180,7 @@ def sync_rule_files(root: Path) -> None:
 
 
 def _sync_group(directory: Path) -> None:
-    """Sync all rule files (CLAUDE.md, AGENTS.md, GEMINI.md) in a single directory."""
+    """Sync all rule files (CLAUDE.md, AGENTS.md, GEMINI.md, KIMI.md) in one directory."""
     files = {name: directory / name for name in _RULE_FILE_NAMES}
     existing = {name: path for name, path in files.items() if path.exists()}
     if not existing:
@@ -532,11 +533,11 @@ _RULE_SYNC_INTERVAL = 10.0  # seconds
 
 
 async def watch_rule_files(workspace: Path, *, interval: float = _RULE_SYNC_INTERVAL) -> None:
-    """Continuously sync CLAUDE.md <-> AGENTS.md <-> GEMINI.md across the workspace.
+    """Continuously sync CLAUDE.md <-> AGENTS.md <-> GEMINI.md <-> KIMI.md.
 
     Every *interval* seconds:
     1. ``ensure_task_rule_files`` adds missing rule files to existing cron
-       tasks (e.g. GEMINI.md after a new provider was authenticated).
+       tasks (e.g. KIMI.md after a new provider was authenticated).
     2. ``sync_rule_files`` propagates content changes across all rule files.
     """
     cron_tasks_dir = workspace / "cron_tasks"

@@ -13,6 +13,8 @@ def test_cli_parameters_config_defaults() -> None:
     config = CLIParametersConfig()
     assert config.claude == []
     assert config.codex == []
+    assert config.gemini == []
+    assert config.kimi == []
 
 
 def test_cli_parameters_config_with_values() -> None:
@@ -20,9 +22,13 @@ def test_cli_parameters_config_with_values() -> None:
     config = CLIParametersConfig(
         claude=["--fast", "--no-cache"],
         codex=["--verbose", "--debug"],
+        gemini=["--yolo"],
+        kimi=["--unsafe"],
     )
     assert config.claude == ["--fast", "--no-cache"]
     assert config.codex == ["--verbose", "--debug"]
+    assert config.gemini == ["--yolo"]
+    assert config.kimi == ["--unsafe"]
 
 
 def test_agent_config_includes_cli_parameters() -> None:
@@ -32,6 +38,8 @@ def test_agent_config_includes_cli_parameters() -> None:
     assert isinstance(config.cli_parameters, CLIParametersConfig)
     assert config.cli_parameters.claude == []
     assert config.cli_parameters.codex == []
+    assert config.cli_parameters.gemini == []
+    assert config.cli_parameters.kimi == []
 
 
 def test_agent_config_with_cli_parameters() -> None:
@@ -40,10 +48,14 @@ def test_agent_config_with_cli_parameters() -> None:
         cli_parameters=CLIParametersConfig(
             claude=["--fast"],
             codex=["--verbose"],
+            gemini=["--sandbox"],
+            kimi=["--yolo"],
         ),
     )
     assert config.cli_parameters.claude == ["--fast"]
     assert config.cli_parameters.codex == ["--verbose"]
+    assert config.cli_parameters.gemini == ["--sandbox"]
+    assert config.cli_parameters.kimi == ["--yolo"]
 
 
 def test_agent_config_json_round_trip_with_cli_parameters() -> None:
@@ -52,6 +64,8 @@ def test_agent_config_json_round_trip_with_cli_parameters() -> None:
         cli_parameters=CLIParametersConfig(
             claude=["--fast", "--no-cache"],
             codex=["--verbose"],
+            gemini=["--sandbox"],
+            kimi=["--unsafe"],
         ),
     )
 
@@ -65,6 +79,8 @@ def test_agent_config_json_round_trip_with_cli_parameters() -> None:
 
     assert restored.cli_parameters.claude == ["--fast", "--no-cache"]
     assert restored.cli_parameters.codex == ["--verbose"]
+    assert restored.cli_parameters.gemini == ["--sandbox"]
+    assert restored.cli_parameters.kimi == ["--unsafe"]
 
 
 def test_deep_merge_preserves_cli_parameters() -> None:
@@ -73,6 +89,8 @@ def test_deep_merge_preserves_cli_parameters() -> None:
         "cli_parameters": {
             "claude": ["--fast"],
             "codex": ["--verbose"],
+            "gemini": ["--sandbox"],
+            "kimi": ["--yolo"],
         },
     }
 
@@ -83,6 +101,8 @@ def test_deep_merge_preserves_cli_parameters() -> None:
     # User values should be preserved
     assert merged["cli_parameters"]["claude"] == ["--fast"]
     assert merged["cli_parameters"]["codex"] == ["--verbose"]
+    assert merged["cli_parameters"]["gemini"] == ["--sandbox"]
+    assert merged["cli_parameters"]["kimi"] == ["--yolo"]
 
     # New top-level fields should be added
     assert "log_level" in merged
@@ -105,6 +125,8 @@ def test_backward_compatibility_without_cli_parameters() -> None:
     assert "cli_parameters" in merged
     assert merged["cli_parameters"]["claude"] == []
     assert merged["cli_parameters"]["codex"] == []
+    assert merged["cli_parameters"]["gemini"] == []
+    assert merged["cli_parameters"]["kimi"] == []
     assert changed is True
 
     # User values should be preserved
@@ -131,6 +153,10 @@ def test_deep_merge_nested_cli_parameters() -> None:
     # Missing codex should be added from defaults
     assert "codex" in merged["cli_parameters"]
     assert merged["cli_parameters"]["codex"] == []
+    assert "gemini" in merged["cli_parameters"]
+    assert merged["cli_parameters"]["gemini"] == []
+    assert "kimi" in merged["cli_parameters"]
+    assert merged["cli_parameters"]["kimi"] == []
     assert changed is True
 
 
@@ -145,6 +171,8 @@ def test_config_file_round_trip(tmp_path: Path) -> None:
         cli_parameters=CLIParametersConfig(
             claude=["--fast"],
             codex=["--verbose", "--debug"],
+            gemini=["--sandbox"],
+            kimi=["--yolo"],
         ),
     )
 
@@ -160,6 +188,8 @@ def test_config_file_round_trip(tmp_path: Path) -> None:
     assert loaded_config.model == "gpt-5.2-codex"
     assert loaded_config.cli_parameters.claude == ["--fast"]
     assert loaded_config.cli_parameters.codex == ["--verbose", "--debug"]
+    assert loaded_config.cli_parameters.gemini == ["--sandbox"]
+    assert loaded_config.cli_parameters.kimi == ["--yolo"]
 
 
 def test_empty_cli_parameters_list_vs_none() -> None:
@@ -168,6 +198,8 @@ def test_empty_cli_parameters_list_vs_none() -> None:
         cli_parameters=CLIParametersConfig(
             claude=[],
             codex=[],
+            gemini=[],
+            kimi=[],
         ),
     )
 
@@ -177,5 +209,9 @@ def test_empty_cli_parameters_list_vs_none() -> None:
     # Empty lists should remain empty lists, not None
     assert restored.cli_parameters.claude == []
     assert restored.cli_parameters.codex == []
+    assert restored.cli_parameters.gemini == []
+    assert restored.cli_parameters.kimi == []
     assert isinstance(restored.cli_parameters.claude, list)
     assert isinstance(restored.cli_parameters.codex, list)
+    assert isinstance(restored.cli_parameters.gemini, list)
+    assert isinstance(restored.cli_parameters.kimi, list)

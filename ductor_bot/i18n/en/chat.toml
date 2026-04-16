@@ -229,6 +229,7 @@ no_auth = "No authenticated providers found.\nRun `claude auth`, `codex auth`, o
 pick_provider = "Pick a provider:"
 select_claude = "Select Claude model:"
 select_gemini = "Select Gemini model:"
+select_kimi = "Select Kimi model:"
 select_codex = "Select Codex model:"
 no_codex = "No Codex models available."
 no_gemini = "No Gemini models discovered from local Gemini CLI files."

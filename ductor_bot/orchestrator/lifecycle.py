@@ -95,7 +95,7 @@ async def create_orchestrator(
     await asyncio.to_thread(orch._providers.init_gemini_state, paths.workspace)
 
     codex_cache = await orch._observers.init_model_caches(
-        on_gemini_refresh=orch._providers.on_gemini_models_refresh
+        on_gemini_refresh=orch._providers.on_gemini_models_refresh,
     )
     orch._observers.init_task_observers(
         cron_manager=orch._cron_manager,

@@ -79,6 +79,10 @@ class TestNewSessionText:
         text = new_session_text("gemini")
         assert "Gemini" in text
 
+    def test_kimi_label(self) -> None:
+        text = new_session_text("kimi")
+        assert "Kimi" in text
+
     def test_unknown_provider_passthrough(self) -> None:
         text = new_session_text("custom")
         assert "custom" in text

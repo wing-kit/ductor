@@ -90,6 +90,31 @@ def parse_codex_result(stdout: bytes) -> str:
     return raw[:2000]
 
 
+def parse_kimi_result(stdout: bytes) -> str:
+    """Extract result text from Kimi CLI JSONL output."""
+    if not stdout:
+        return ""
+    raw = stdout.decode(errors="replace").strip()
+    if not raw:
+        return ""
+
+    text_parts: list[str] = []
+    for line in raw.splitlines():
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("role") == "assistant":
+            content = data.get("content")
+            if isinstance(content, str) and content:
+                text_parts.append(content)
+    if text_parts:
+        return "".join(text_parts)
+    return raw[:2000]
+
+
 def parse_result(provider: str, stdout: bytes) -> str:
     """Extract result text from provider-specific CLI output."""
     parser = _RESULT_PARSERS.get(provider, parse_claude_result)
@@ -173,18 +198,35 @@ def _build_codex_cmd(exec_config: TaskExecutionConfig, prompt: str) -> OneShotCo
     return OneShotCommand(cmd=cmd)
 
 
+def _build_kimi_cmd(exec_config: TaskExecutionConfig, prompt: str) -> OneShotCommand | None:
+    """Build a Kimi CLI command for one-shot cron execution."""
+    cli = which("kimi")
+    if not cli:
+        return None
+    cmd = [cli, "--print", "--output-format", "stream-json"]
+    if exec_config.model:
+        cmd += ["--model", exec_config.model]
+    if exec_config.permission_mode == "bypassPermissions":
+        cmd.append("--yolo")
+    cmd.extend(exec_config.cli_parameters)
+    cmd += ["--prompt", prompt]
+    return OneShotCommand(cmd=cmd)
+
+
 _CmdBuilder = Callable[[TaskExecutionConfig, str], OneShotCommand | None]
 _ResultParser = Callable[[bytes], str]
 
 _CMD_BUILDERS: dict[str, _CmdBuilder] = {
     "claude": _build_claude_cmd,
     "gemini": _build_gemini_cmd,
+    "kimi": _build_kimi_cmd,
     "codex": _build_codex_cmd,
 }
 
 _RESULT_PARSERS: dict[str, _ResultParser] = {
     "claude": parse_claude_result,
     "gemini": parse_gemini_result,
+    "kimi": parse_kimi_result,
     "codex": parse_codex_result,
 }
 

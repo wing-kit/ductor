@@ -28,11 +28,12 @@ def mock_paths(tmp_path: Path) -> DuctorPaths:
     for d in [config_dir, cron_dir, webhook_dir]:
         d.mkdir(parents=True)
 
-    # Create all 4 template variants for each directory
+    # Create all template variants for each directory
     for d in [config_dir, cron_dir, webhook_dir]:
         (d / "RULES-claude-only.md").write_text("# Claude Only Template")
         (d / "RULES-codex-only.md").write_text("# Codex Only Template")
         (d / "RULES-gemini-only.md").write_text("# Gemini Only Template")
+        (d / "RULES-kimi-only.md").write_text("# Kimi Only Template")
         (d / "RULES-all-clis.md").write_text("# All CLIs Template")
 
     paths = MagicMock(spec=DuctorPaths)
@@ -363,6 +364,20 @@ def test_variant_selection_codex_and_gemini(mock_paths: DuctorPaths) -> None:
         assert selector.get_variant_suffix() == "all-clis"
 
 
+def test_variant_selection_kimi_only(mock_paths: DuctorPaths) -> None:
+    """Test variant selection when only Kimi is authenticated."""
+    auth = {
+        "claude": AuthResult(provider="claude", status=AuthStatus.NOT_FOUND),
+        "codex": AuthResult(provider="codex", status=AuthStatus.NOT_FOUND),
+        "gemini": AuthResult(provider="gemini", status=AuthStatus.NOT_FOUND),
+        "kimi": AuthResult(provider="kimi", status=AuthStatus.AUTHENTICATED),
+    }
+
+    with patch("ductor_bot.cli.auth.check_all_auth", return_value=auth):
+        selector = RulesSelector(mock_paths)
+        assert selector.get_variant_suffix() == "kimi-only"
+
+
 def test_deploy_with_gemini_creates_gemini_md(mock_paths: DuctorPaths) -> None:
     """Test that GEMINI.md is deployed when Gemini is authenticated."""
     auth = {
@@ -384,6 +399,29 @@ def test_deploy_with_gemini_creates_gemini_md(mock_paths: DuctorPaths) -> None:
         assert not (mock_paths.ductor_home / "config" / "AGENTS.md").exists()
 
 
+def test_deploy_with_kimi_creates_kimi_md(mock_paths: DuctorPaths) -> None:
+    """Test that KIMI.md is deployed when Kimi is authenticated."""
+    auth = {
+        "claude": AuthResult(provider="claude", status=AuthStatus.NOT_FOUND),
+        "codex": AuthResult(provider="codex", status=AuthStatus.NOT_FOUND),
+        "gemini": AuthResult(provider="gemini", status=AuthStatus.NOT_FOUND),
+        "kimi": AuthResult(provider="kimi", status=AuthStatus.AUTHENTICATED),
+    }
+
+    with patch("ductor_bot.cli.auth.check_all_auth", return_value=auth):
+        selector = RulesSelector(mock_paths)
+        selector.deploy_rules()
+
+        kimi_md = mock_paths.ductor_home / "config" / "KIMI.md"
+        assert kimi_md.exists()
+        assert "Kimi Only Template" in kimi_md.read_text()
+
+        # CLAUDE.md / AGENTS.md / GEMINI.md should NOT exist
+        assert not (mock_paths.ductor_home / "config" / "CLAUDE.md").exists()
+        assert not (mock_paths.ductor_home / "config" / "AGENTS.md").exists()
+        assert not (mock_paths.ductor_home / "config" / "GEMINI.md").exists()
+
+
 def test_deploy_all_three_providers(mock_paths: DuctorPaths) -> None:
     """Test that all three rule files are deployed when all providers authenticated."""
     auth = {
@@ -400,6 +438,26 @@ def test_deploy_all_three_providers(mock_paths: DuctorPaths) -> None:
         assert (config_dir / "CLAUDE.md").exists()
         assert (config_dir / "AGENTS.md").exists()
         assert (config_dir / "GEMINI.md").exists()
+
+
+def test_deploy_all_four_providers(mock_paths: DuctorPaths) -> None:
+    """Test that all four rule files are deployed when all providers authenticated."""
+    auth = {
+        "claude": AuthResult(provider="claude", status=AuthStatus.AUTHENTICATED),
+        "codex": AuthResult(provider="codex", status=AuthStatus.AUTHENTICATED),
+        "gemini": AuthResult(provider="gemini", status=AuthStatus.AUTHENTICATED),
+        "kimi": AuthResult(provider="kimi", status=AuthStatus.AUTHENTICATED),
+    }
+
+    with patch("ductor_bot.cli.auth.check_all_auth", return_value=auth):
+        selector = RulesSelector(mock_paths)
+        selector.deploy_rules()
+
+        config_dir = mock_paths.ductor_home / "config"
+        assert (config_dir / "CLAUDE.md").exists()
+        assert (config_dir / "AGENTS.md").exists()
+        assert (config_dir / "GEMINI.md").exists()
+        assert (config_dir / "KIMI.md").exists()
 
 
 def test_cleanup_removes_gemini_md_when_not_authenticated(mock_paths: DuctorPaths) -> None:
@@ -419,4 +477,25 @@ def test_cleanup_removes_gemini_md_when_not_authenticated(mock_paths: DuctorPath
         selector.deploy_rules()
 
         assert not old_gemini.exists()
+        assert (mock_paths.ductor_home / "config" / "CLAUDE.md").exists()
+
+
+def test_cleanup_removes_kimi_md_when_not_authenticated(mock_paths: DuctorPaths) -> None:
+    """Test that stale KIMI.md files are removed when Kimi is not authenticated."""
+    old_kimi = mock_paths.ductor_home / "config" / "KIMI.md"
+    old_kimi.parent.mkdir(parents=True, exist_ok=True)
+    old_kimi.write_text("# Old Kimi File")
+
+    auth = {
+        "claude": AuthResult(provider="claude", status=AuthStatus.AUTHENTICATED),
+        "codex": AuthResult(provider="codex", status=AuthStatus.NOT_FOUND),
+        "gemini": AuthResult(provider="gemini", status=AuthStatus.NOT_FOUND),
+        "kimi": AuthResult(provider="kimi", status=AuthStatus.NOT_FOUND),
+    }
+
+    with patch("ductor_bot.cli.auth.check_all_auth", return_value=auth):
+        selector = RulesSelector(mock_paths)
+        selector.deploy_rules()
+
+        assert not old_kimi.exists()
         assert (mock_paths.ductor_home / "config" / "CLAUDE.md").exists()

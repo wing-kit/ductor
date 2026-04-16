@@ -230,6 +230,7 @@ no_auth = "Kein Provider authentifiziert.\nFühre `claude auth`, `codex auth` au
 pick_provider = "Wähle einen Provider:"
 select_claude = "Claude-Modell auswählen:"
 select_gemini = "Gemini-Modell auswählen:"
+select_kimi = "Kimi-Modell auswählen:"
 select_codex = "Codex-Modell auswählen:"
 no_codex = "Keine Codex-Modelle verfügbar."
 no_gemini = "Keine Gemini-Modelle aus lokalen CLI-Dateien gefunden."

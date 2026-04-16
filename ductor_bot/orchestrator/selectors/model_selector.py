@@ -168,6 +168,8 @@ async def model_selector_start(
         buttons.append(Button(text="CODEX", callback_data="ms:p:codex"))
     if "gemini" in authed:
         buttons.append(Button(text="GEMINI", callback_data="ms:p:gemini"))
+    if "kimi" in authed:
+        buttons.append(Button(text="KIMI", callback_data="ms:p:kimi"))
 
     keyboard = ButtonGrid(rows=[buttons])
     return SelectorResponse(text=f"{header}\n\n{t('model.pick_provider')}", buttons=keyboard)
@@ -363,6 +365,15 @@ async def _build_model_step(
         keyboard = ButtonGrid(rows=gemini_rows)
         return SelectorResponse(text=f"{header}\n\n{t('model.select_gemini')}", buttons=keyboard)
 
+    if provider == "kimi":
+        rows = [
+            [Button(text="kimi-auto", callback_data="ms:m:kimi-auto")],
+            [Button(text="kimi-k2-0905-preview", callback_data="ms:m:kimi-k2-0905-preview")],
+            [Button(text=t("model.btn_back"), callback_data="ms:b:root")],
+        ]
+        keyboard = ButtonGrid(rows=rows)
+        return SelectorResponse(text=f"{header}\n\n{t('model.select_kimi')}", buttons=keyboard)
+
     # Use cache instead of live discovery
     codex_models = codex_cache.models if codex_cache else []
     if not codex_models:
@@ -391,7 +402,7 @@ async def _handle_model_selected(
     """Handle a model button press. Claude/Gemini: switch immediately. Codex: show reasoning."""
     provider = orch.models.provider_for(model_id)
 
-    if provider in ("claude", "gemini"):
+    if provider in ("claude", "gemini", "kimi"):
         result = await switch_model(orch, key, model_id)
         return SelectorResponse(text=result)
 

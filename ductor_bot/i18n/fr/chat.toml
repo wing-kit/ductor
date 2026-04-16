@@ -230,6 +230,7 @@ no_auth = "Aucun provider authentifié.\nLance `claude auth`, `codex auth` ou au
 pick_provider = "Choisis un provider :"
 select_claude = "Choisis un modèle Claude :"
 select_gemini = "Choisis un modèle Gemini :"
+select_kimi = "Choisis un modèle Kimi :"
 select_codex = "Choisis un modèle Codex :"
 no_codex = "Aucun modèle Codex disponible."
 no_gemini = "Aucun modèle Gemini découvert dans les fichiers CLI Gemini locaux."

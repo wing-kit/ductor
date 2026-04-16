@@ -230,6 +230,7 @@ no_auth = "No se encontraron proveedores autenticados.\nEjecuta `claude auth`, `
 pick_provider = "Elige un proveedor:"
 select_claude = "Selecciona modelo de Claude:"
 select_gemini = "Selecciona modelo de Gemini:"
+select_kimi = "Selecciona modelo de Kimi:"
 select_codex = "Selecciona modelo de Codex:"
 no_codex = "No hay modelos de Codex disponibles."
 no_gemini = "No se encontraron modelos de Gemini en los archivos locales de la CLI."

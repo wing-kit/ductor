@@ -17,6 +17,7 @@ def test_sync_does_not_create_missing_files(tmp_path: Path) -> None:
     sync_rule_files(tmp_path)
     assert not (tmp_path / "AGENTS.md").exists()
     assert not (tmp_path / "GEMINI.md").exists()
+    assert not (tmp_path / "KIMI.md").exists()
 
 
 def test_sync_does_not_create_claude_from_agents(tmp_path: Path) -> None:
@@ -101,6 +102,7 @@ def test_sync_recursive_does_not_create_missing(tmp_path: Path) -> None:
 
     assert not (sub / "AGENTS.md").exists()
     assert not (sub / "GEMINI.md").exists()
+    assert not (sub / "KIMI.md").exists()
 
 
 def test_sync_skips_venv_and_dotdirs(tmp_path: Path) -> None:
@@ -171,6 +173,7 @@ async def test_watch_does_not_create_missing_files(tmp_path: Path) -> None:
         await asyncio.sleep(0.3)
         assert not (tmp_path / "AGENTS.md").exists()
         assert not (tmp_path / "GEMINI.md").exists()
+        assert not (tmp_path / "KIMI.md").exists()
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

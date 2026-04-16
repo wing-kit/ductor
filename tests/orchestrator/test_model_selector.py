@@ -26,9 +26,11 @@ from ductor_bot.session.key import SessionKey
 _AUTHED_CLAUDE = AuthResult("claude", AuthStatus.AUTHENTICATED)
 _AUTHED_CODEX = AuthResult("codex", AuthStatus.AUTHENTICATED)
 _AUTHED_GEMINI = AuthResult("gemini", AuthStatus.AUTHENTICATED)
+_AUTHED_KIMI = AuthResult("kimi", AuthStatus.AUTHENTICATED)
 _NOT_FOUND_CLAUDE = AuthResult("claude", AuthStatus.NOT_FOUND)
 _NOT_FOUND_CODEX = AuthResult("codex", AuthStatus.NOT_FOUND)
 _NOT_FOUND_GEMINI = AuthResult("gemini", AuthStatus.NOT_FOUND)
+_NOT_FOUND_KIMI = AuthResult("kimi", AuthStatus.NOT_FOUND)
 
 _CODEX_MODELS = [
     CodexModelInfo(
@@ -152,6 +154,23 @@ async def test_start_two_providers(orch: Orchestrator) -> None:
     labels = [btn.text for row in resp.buttons.rows for btn in row]
     assert "CLAUDE" in labels
     assert "CODEX" in labels
+    assert "KIMI" not in labels
+
+
+async def test_start_with_kimi_provider_button(orch: Orchestrator) -> None:
+    with _patch_auth(
+        {
+            "claude": _AUTHED_CLAUDE,
+            "codex": _AUTHED_CODEX,
+            "gemini": _NOT_FOUND_GEMINI,
+            "kimi": AuthResult("kimi", AuthStatus.AUTHENTICATED),
+        }
+    ):
+        resp = await model_selector_start(orch, SessionKey(chat_id=1))
+    assert "Model Selector" in resp.text
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "KIMI" in labels
 
 
 async def test_start_one_provider_gemini_uses_discovered_models(orch: Orchestrator) -> None:
@@ -203,6 +222,15 @@ async def test_callback_provider_codex_fallback(orch: Orchestrator) -> None:
     assert resp.buttons is not None
     labels = [btn.text for row in resp.buttons.rows for btn in row]
     assert any("o3" in label.lower() for label in labels) or "<< Back" in labels
+
+
+async def test_callback_provider_kimi(orch: Orchestrator) -> None:
+    resp = await handle_model_callback(orch, SessionKey(chat_id=1), "ms:p:kimi")
+    assert "Select Kimi model" in resp.text
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "kimi-auto" in labels
+    assert "kimi-k2-0905-preview" in labels
 
 
 # -- handle_model_callback: model selection --

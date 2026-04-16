@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Claude Code, Codex CLI, and Gemini CLI as your coding assistant — on Telegram.</strong><br>
+  <strong>Claude Code, Codex CLI, Gemini CLI, and Kimi CLI as your coding assistant — on Telegram.</strong><br>
   Uses only official CLIs. Nothing spoofed, nothing proxied. Matrix and more via plugin system.
 </p>
 
@@ -15,6 +15,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick start</a> &middot;
+  <a href="docs/zh-TW/README.md">中文文件</a> &middot;
   <a href="#how-chats-work">How chats work</a> &middot;
   <a href="#commands">Commands</a> &middot;
   <a href="docs/README.md">Docs</a> &middot;
@@ -23,7 +24,7 @@
 
 ---
 
-If you want to control Claude Code, Google's Gemini CLI, or OpenAI's Codex CLI via Telegram, build automations, or manage multiple agents easily — ductor is the right tool for you. Additional messengers (Matrix, and more to come) are supported via a modular plugin system.
+If you want to control Claude Code, Google's Gemini CLI, Moonshot's Kimi CLI, or OpenAI's Codex CLI via Telegram, build automations, or manage multiple agents easily — ductor is the right tool for you. Additional messengers (Matrix, and more to come) are supported via a modular plugin system.
 
 ductor runs on your machine and sends simple console commands as if you were typing them yourself, so you can use your active subscriptions (Claude Max, etc.) directly. No API proxying, no SDK patching, no spoofed headers. Just the official CLIs, executed as subprocesses, with all state kept in plain JSON and Markdown under `~/.ductor/`.
 
@@ -41,7 +42,7 @@ ductor
 
 The onboarding wizard handles CLI checks, transport setup (Telegram or Matrix), timezone, optional Docker, and optional background service install.
 
-**Requirements:** Python 3.11+, at least one CLI installed (`claude`, `codex`, or `gemini`), and either:
+**Requirements:** Python 3.11+, at least one CLI installed (`claude`, `codex`, `gemini`, or `kimi`), and either:
 
 - a Telegram Bot Token from [@BotFather](https://t.me/BotFather), or
 - a Matrix account on a homeserver (homeserver URL, user ID, password/access token)
@@ -56,7 +57,7 @@ ductor gives you multiple ways to interact with your coding agents. Each level b
 
 ### 1. Single chat (your main agent)
 
-This is where everyone starts. You get a private 1:1 chat with your bot (Telegram or Matrix). Every message goes to the CLI you have active (`claude`, `codex`, or `gemini`), responses stream back in real time.
+This is where everyone starts. You get a private 1:1 chat with your bot (Telegram or Matrix). Every message goes to the CLI you have active (`claude`, `codex`, `gemini`, or `kimi`), responses stream back in real time.
 
 ```text
 You:   "Explain the auth flow in this codebase"
@@ -203,7 +204,7 @@ Main chat:  "Ask codex-agent to write tests for the API"
 - **Config hot-reload** — most settings update without restart (including language, scene, image)
 - **Docker sandbox** — optional sidecar container with configurable host mounts
 - **Service manager** — Linux (systemd), macOS (launchd), Windows (Task Scheduler)
-- **Cross-tool skill sync** — shared skills across `~/.claude/`, `~/.codex/`, `~/.gemini/`
+- **Cross-tool skill sync** — shared skills across `~/.claude/`, `~/.codex/`, `~/.gemini/`, `~/.kimi/`
 
 ## Messenger support
 
@@ -233,6 +234,15 @@ in a new sub-package and registering it — the rest of ductor works without cha
 Guide: [`docs/modules/messenger.md`](docs/modules/messenger.md)
 
 ## Auth
+
+### Provider CLIs
+
+ductor checks each installed provider CLI independently at startup/onboarding.
+
+- **Claude**: `claude` available on PATH and authenticated via Claude Code CLI flow.
+- **Codex**: `codex` available on PATH and authenticated via Codex CLI flow.
+- **Gemini**: `gemini` available and authenticated via Gemini CLI flow.
+- **Kimi**: `kimi` available on PATH and `KIMI_API_KEY` present in environment.
 
 ### Telegram
 
@@ -373,7 +383,7 @@ the bundled agent tool scripts.
   webhooks.json                      # Webhook definitions
   agents.json                        # Sub-agent registry (optional)
   SHAREDMEMORY.md                    # Shared knowledge across all agents
-  CLAUDE.md / AGENTS.md / GEMINI.md  # Rule files
+  CLAUDE.md / AGENTS.md / GEMINI.md / KIMI.md  # Rule files
   logs/agent.log
   workspace/
     memory_system/MAINMEMORY.md      # Persistent memory
@@ -404,8 +414,8 @@ Full config reference: [`docs/config.md`](docs/config.md) — full example with 
 
 Other projects manipulate SDKs or patch CLIs and risk violating provider terms of service. ductor simply runs the official CLI binaries as subprocesses — nothing more.
 
-- Official CLIs only (`claude`, `codex`, `gemini`)
-- Rule files are plain Markdown (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`)
+- Official CLIs only (`claude`, `codex`, `gemini`, `kimi`)
+- Rule files are plain Markdown (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `KIMI.md`)
 - Memory is one Markdown file per agent
 - All state is JSON — no database, no external services
 

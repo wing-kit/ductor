@@ -21,12 +21,14 @@ class RulesSelector:
     - RULES-claude-only.md (Claude-specific variant)
     - RULES-codex-only.md (Codex-specific variant)
     - RULES-gemini-only.md (Gemini-specific variant)
+    - RULES-kimi-only.md (Kimi-specific variant)
     - RULES-all-clis.md (multi-provider variant)
 
     Deployed naming in ~/.ductor/:
     - CLAUDE.md (created if Claude authenticated)
     - AGENTS.md (created if Codex authenticated)
     - GEMINI.md (created if Gemini authenticated)
+    - KIMI.md (created if Kimi authenticated)
     - All synchronized via sync_rule_files() when multiple exist
 
     Usage:
@@ -43,6 +45,7 @@ class RulesSelector:
         claude_result = auth.get("claude")
         codex_result = auth.get("codex")
         gemini_result = auth.get("gemini")
+        kimi_result = auth.get("kimi")
 
         self._claude_authenticated = (
             claude_result.status == AuthStatus.AUTHENTICATED if claude_result else False
@@ -53,6 +56,7 @@ class RulesSelector:
         self._gemini_authenticated = (
             gemini_result.status == AuthStatus.AUTHENTICATED if gemini_result else False
         )
+        self._kimi_authenticated = kimi_result.status == AuthStatus.AUTHENTICATED if kimi_result else False
 
     @property
     def _authenticated_count(self) -> int:
@@ -62,6 +66,7 @@ class RulesSelector:
                 self._claude_authenticated,
                 self._codex_authenticated,
                 self._gemini_authenticated,
+                self._kimi_authenticated,
             )
         )
 
@@ -73,6 +78,7 @@ class RulesSelector:
             "claude-only" if only Claude
             "codex-only" if only Codex
             "gemini-only" if only Gemini
+            "kimi-only" if only Kimi
             "claude-only" as fallback (no providers authenticated)
         """
         if self._authenticated_count >= 2:
@@ -81,6 +87,8 @@ class RulesSelector:
             return "codex-only"
         if self._gemini_authenticated:
             return "gemini-only"
+        if self._kimi_authenticated:
+            return "kimi-only"
         return "claude-only"
 
     def discover_template_directories(self) -> list[Path]:
@@ -134,20 +142,22 @@ class RulesSelector:
 
         Scans _home_defaults/ for directories with RULES templates, selects
         the best variant for current auth state, and deploys to ~/.ductor/
-        as CLAUDE.md, AGENTS.md, and/or GEMINI.md based on authentication.
+        as CLAUDE.md, AGENTS.md, GEMINI.md, and/or KIMI.md based on authentication.
 
         Deployment logic:
         - Claude authenticated → CLAUDE.md
         - Codex authenticated → AGENTS.md
         - Gemini authenticated → GEMINI.md
+        - Kimi authenticated → KIMI.md
         """
         variant = self.get_variant_suffix()
         logger.info(
-            "Deploying rule files (variant: %s, claude=%s, codex=%s, gemini=%s)",
+            "Deploying rule files (variant: %s, claude=%s, codex=%s, gemini=%s, kimi=%s)",
             variant,
             self._claude_authenticated,
             self._codex_authenticated,
             self._gemini_authenticated,
+            self._kimi_authenticated,
         )
 
         template_dirs = self.discover_template_directories()
@@ -193,15 +203,23 @@ class RulesSelector:
                     deployed_count += 1
                     logger.debug("Deployed: %s -> GEMINI.md", template.name)
 
+                # Deploy KIMI.md if Kimi is authenticated
+                if self._kimi_authenticated:
+                    kimi_dst = dst_dir / "KIMI.md"
+                    shutil.copy2(template, kimi_dst)
+                    deployed_count += 1
+                    logger.debug("Deployed: %s -> KIMI.md", template.name)
+
             except OSError:
                 logger.exception("Failed to deploy %s", template)
 
         logger.info(
-            "Deployed %d rule files (Claude=%s, Codex=%s, Gemini=%s)",
+            "Deployed %d rule files (Claude=%s, Codex=%s, Gemini=%s, Kimi=%s)",
             deployed_count,
             self._claude_authenticated,
             self._codex_authenticated,
             self._gemini_authenticated,
+            self._kimi_authenticated,
         )
 
         # Cleanup: Remove stale files that don't match current auth status
@@ -210,7 +228,7 @@ class RulesSelector:
     def _cleanup_stale_files(self) -> None:
         """Remove rule files that don't match current auth status.
 
-        Removes CLAUDE.md, AGENTS.md, or GEMINI.md files for providers
+        Removes CLAUDE.md, AGENTS.md, GEMINI.md, or KIMI.md files for providers
         that are not currently authenticated.
         """
         stale: list[tuple[str, str]] = []
@@ -220,6 +238,8 @@ class RulesSelector:
             stale.append(("AGENTS.md", "Codex"))
         if not self._gemini_authenticated:
             stale.append(("GEMINI.md", "Gemini"))
+        if not self._kimi_authenticated:
+            stale.append(("KIMI.md", "Kimi"))
 
         for filename, provider_name in stale:
             removed = self._remove_files_by_name(filename)
