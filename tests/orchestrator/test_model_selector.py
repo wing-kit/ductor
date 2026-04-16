@@ -13,7 +13,7 @@ import pytest
 from ductor_bot.cli.auth import AuthResult, AuthStatus
 from ductor_bot.cli.codex_cache import CodexModelCache
 from ductor_bot.cli.codex_discovery import CodexModelInfo
-from ductor_bot.config import reset_gemini_models, set_gemini_models
+from ductor_bot.config import DEFAULT_KIMI_MODEL, reset_gemini_models, set_gemini_models
 from ductor_bot.orchestrator.core import Orchestrator
 from ductor_bot.orchestrator.selectors.model_selector import (
     handle_model_callback,
@@ -173,6 +173,22 @@ async def test_start_with_kimi_provider_button(orch: Orchestrator) -> None:
     assert "KIMI" in labels
 
 
+async def test_start_excludes_disabled_provider_button(orch: Orchestrator) -> None:
+    orch._config.disabled_providers = ["kimi"]
+    with _patch_auth(
+        {
+            "claude": _AUTHED_CLAUDE,
+            "codex": _NOT_FOUND_CODEX,
+            "gemini": _NOT_FOUND_GEMINI,
+            "kimi": _AUTHED_KIMI,
+        }
+    ):
+        resp = await model_selector_start(orch, SessionKey(chat_id=1))
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "KIMI" not in labels
+
+
 async def test_start_one_provider_gemini_uses_discovered_models(orch: Orchestrator) -> None:
     set_gemini_models(
         frozenset(
@@ -229,7 +245,7 @@ async def test_callback_provider_kimi(orch: Orchestrator) -> None:
     assert "Select Kimi model" in resp.text
     assert resp.buttons is not None
     labels = [btn.text for row in resp.buttons.rows for btn in row]
-    assert "kimi-auto" in labels
+    assert DEFAULT_KIMI_MODEL in labels
     assert "kimi-k2-0905-preview" in labels
 
 

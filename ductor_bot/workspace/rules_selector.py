@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
     from ductor_bot.workspace.paths import DuctorPaths
 
 logger = logging.getLogger(__name__)
+_PROVIDER_IDS = frozenset({"claude", "codex", "gemini", "kimi"})
 
 
 class RulesSelector:
@@ -40,6 +42,7 @@ class RulesSelector:
         from ductor_bot.cli.auth import AuthStatus, check_all_auth
 
         self._paths = paths
+        self._disabled_providers = self._load_disabled_providers()
         # Cache auth status to avoid multiple checks
         auth = check_all_auth()
         claude_result = auth.get("claude")
@@ -49,14 +52,37 @@ class RulesSelector:
 
         self._claude_authenticated = (
             claude_result.status == AuthStatus.AUTHENTICATED if claude_result else False
-        )
+        ) and "claude" not in self._disabled_providers
         self._codex_authenticated = (
             codex_result.status == AuthStatus.AUTHENTICATED if codex_result else False
-        )
+        ) and "codex" not in self._disabled_providers
         self._gemini_authenticated = (
             gemini_result.status == AuthStatus.AUTHENTICATED if gemini_result else False
-        )
-        self._kimi_authenticated = kimi_result.status == AuthStatus.AUTHENTICATED if kimi_result else False
+        ) and "gemini" not in self._disabled_providers
+        self._kimi_authenticated = (
+            kimi_result.status == AuthStatus.AUTHENTICATED if kimi_result else False
+        ) and "kimi" not in self._disabled_providers
+
+    def _load_disabled_providers(self) -> frozenset[str]:
+        """Read disabled provider IDs from config.json."""
+        config_path = self._paths.config_path
+        if not config_path.is_file():
+            return frozenset()
+        try:
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, TypeError):
+            return frozenset()
+        if not isinstance(data, dict):
+            return frozenset()
+        raw = data.get("disabled_providers")
+        if not isinstance(raw, list):
+            return frozenset()
+        disabled = {
+            provider.strip().lower()
+            for provider in raw
+            if isinstance(provider, str) and provider.strip().lower() in _PROVIDER_IDS
+        }
+        return frozenset(disabled)
 
     @property
     def _authenticated_count(self) -> int:

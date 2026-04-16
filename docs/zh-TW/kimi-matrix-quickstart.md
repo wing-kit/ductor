@@ -10,21 +10,17 @@
 1. Python 3.11+
 2. 已安裝 `ductor`
 3. 已安裝並可執行 `kimi` 指令
-4. 環境變數已設定 `KIMI_API_KEY`
+4. Kimi CLI 已完成可用的登入或金鑰設定（不一定要用環境變數）
 5. Matrix 機器人帳號（homeserver、user_id、password）
 
 建議先檢查：
 
 ```bash
 kimi --version
-echo "$KIMI_API_KEY"
+ls -la ~/.kimi
 ```
 
-若 `KIMI_API_KEY` 沒值，請先設定（依你的 shell/部署方式）：
-
-```bash
-export KIMI_API_KEY="your_key_here"
-```
+若你偏好用環境變數也可以設定 `KIMI_API_KEY`，但不是唯一方式。
 
 ---
 
@@ -50,7 +46,7 @@ pip install "ductor[matrix]"
 {
   "transport": "matrix",
   "provider": "kimi",
-  "model": "kimi-auto",
+  "model": "kimi-for-coding",
   "matrix": {
     "homeserver": "https://matrix-client.matrix.org",
     "user_id": "@my_ductor_bot:matrix.org",
@@ -64,7 +60,7 @@ pip install "ductor[matrix]"
 
 說明：
 - `provider: "kimi"`：預設走 Kimi CLI
-- `model: "kimi-auto"`：建議先用自動路由
+- `model: "kimi-for-coding"`：Kimi 預設程式碼模型
 - `allowed_users`：建議先鎖定你自己的 Matrix 帳號
 
 ---
@@ -77,7 +73,7 @@ pip install "ductor[matrix]"
 {
   "transports": ["telegram", "matrix"],
   "provider": "kimi",
-  "model": "kimi-auto",
+  "model": "kimi-for-coding",
   "telegram_token": "YOUR_TELEGRAM_TOKEN",
   "allowed_user_ids": [123456789],
   "matrix": {
@@ -123,8 +119,8 @@ ductor
 - 在同一個執行環境（service/container）內執行 `kimi --version`。
 
 ### Q2: Kimi 看起來已安裝但仍無法使用
-- 最常見是 `KIMI_API_KEY` 沒有傳進 bot 的執行環境。
-- 如果你用 systemd/launchd/Task Scheduler，記得把環境變數加到服務設定中。
+- 先確認同一個執行環境下 `kimi` 可直接互動並成功回應。
+- 若你是用環境變數方式，請確認 `KIMI_API_KEY` 有傳進 bot 的執行環境。
 
 ### Q3: Matrix 沒收到訊息
 - 先檢查 `allowed_rooms`/`allowed_users`。

@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 logger = logging.getLogger(__name__)
 NULLISH_TEXT_VALUES: frozenset[str] = frozenset({"null", "none"})
 DEFAULT_EMPTY_GEMINI_API_KEY: str = "null"
+DEFAULT_KIMI_MODEL: str = "kimi-for-coding"
+PROVIDER_IDS: frozenset[str] = frozenset({"claude", "codex", "gemini", "kimi"})
 
 # Intentional bind-all: the API is designed for private-network use (Tailscale).
 # Public exposure is gated by ``allow_public`` + a prominent warning at startup.
@@ -280,6 +282,7 @@ class AgentConfig(BaseModel):
     log_level: str = "INFO"
     provider: str = "claude"
     model: str = "opus"
+    disabled_providers: list[str] = Field(default_factory=list)
     ductor_home: str = "~/.ductor"
     idle_timeout_minutes: int = 1440
     session_age_warning_hours: int = 12
@@ -327,6 +330,31 @@ class AgentConfig(BaseModel):
             return None
         return normalized
 
+    @field_validator("disabled_providers", mode="before")
+    @classmethod
+    def _normalize_disabled_providers(cls, value: object) -> list[str]:
+        """Normalize and validate explicitly disabled providers."""
+        if value is None:
+            return []
+        if not isinstance(value, (list, tuple, set)):
+            msg = "disabled_providers must be a list of provider names"
+            raise ValueError(msg)
+
+        normalized: list[str] = []
+        for raw in value:
+            if not isinstance(raw, str):
+                msg = "disabled_providers values must be strings"
+                raise ValueError(msg)
+            candidate = raw.strip().lower()
+            if not candidate:
+                continue
+            if candidate not in PROVIDER_IDS:
+                msg = f"Unknown provider in disabled_providers: {candidate}"
+                raise ValueError(msg)
+            if candidate not in normalized:
+                normalized.append(candidate)
+        return normalized
+
     @model_validator(mode="after")
     def _sync_cli_timeout_to_timeouts(self) -> AgentConfig:
         """Sync legacy ``cli_timeout`` to ``timeouts.normal`` for backward compat.
@@ -355,6 +383,15 @@ class AgentConfig(BaseModel):
     def is_multi_transport(self) -> bool:
         """True when more than one transport is configured."""
         return len(self.transports) > 1
+
+    @property
+    def disabled_provider_set(self) -> frozenset[str]:
+        """Return explicitly disabled providers as a set for fast checks."""
+        return frozenset(self.disabled_providers)
+
+    def is_provider_disabled(self, provider: str) -> bool:
+        """Return True when a provider is explicitly disabled in config."""
+        return provider.lower() in self.disabled_provider_set
 
 
 def resolve_timeout(config: AgentConfig, path: str) -> float:

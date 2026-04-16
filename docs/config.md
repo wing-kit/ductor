@@ -67,6 +67,7 @@ Changes take effect on the next CLI invocation (mtime-based cache invalidation, 
 | `log_level` | `str` | `"INFO"` | Applied at startup unless CLI `--verbose` is used |
 | `provider` | `str` | `"claude"` | Default provider |
 | `model` | `str` | `"opus"` | Default model ID |
+| `disabled_providers` | `list[str]` | `[]` | Explicitly disable providers (`claude`, `codex`, `gemini`, `kimi`) even when authenticated |
 | `ductor_home` | `str` | `"~/.ductor"` | Runtime home root |
 | `idle_timeout_minutes` | `int` | `1440` | Session freshness idle timeout (`0` disables idle expiry) |
 | `session_age_warning_hours` | `int` | `12` | Adds `/new` reminder after threshold (every 10 messages) |
@@ -430,7 +431,14 @@ Restart classification is computed from `AgentConfig` top-level schema fields.
 - Provider resolution (`provider_for(model_id)`):
   - Claude when in `CLAUDE_MODELS`,
   - Gemini when in aliases/discovered set or when model looks like `gemini-*`/`auto-gemini-*`,
+  - Kimi when model looks like `kimi-*`,
   - otherwise Codex.
+
+Kimi defaults:
+
+- default Kimi model is `kimi-for-coding`,
+- `/model` Kimi picker includes `kimi-for-coding` by default,
+- when runtime Kimi model cache is empty, API provider metadata still exposes `kimi-for-coding`.
 
 ## Timezone Resolution
 

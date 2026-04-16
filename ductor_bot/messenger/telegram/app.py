@@ -20,7 +20,7 @@ from ductor_bot.bus.bus import MessageBus
 from ductor_bot.bus.lock_pool import LockPool
 from ductor_bot.commands import BOT_COMMANDS as _COMMAND_DEFS
 from ductor_bot.commands import MULTIAGENT_SUB_COMMANDS as _MA_SUB_DEFS
-from ductor_bot.config import AgentConfig
+from ductor_bot.config import DEFAULT_KIMI_MODEL, AgentConfig
 from ductor_bot.files.allowed_roots import resolve_allowed_roots
 from ductor_bot.i18n import t
 from ductor_bot.infra.restart import EXIT_RESTART, consume_restart_marker
@@ -892,6 +892,9 @@ class TelegramBot:
                 lines.append(t("session_help.claude_model"))
             elif p == "codex":
                 lines.append(t("session_help.codex_single"))
+            elif p == "kimi":
+                lines.append(t("session_help.gemini_single"))
+                lines.append(t("session_help.gemini_model", model=DEFAULT_KIMI_MODEL))
             else:
                 lines.append(t("session_help.gemini_single"))
                 lines.append(t("session_help.gemini_model"))
@@ -902,6 +905,8 @@ class TelegramBot:
             if "codex" in providers:
                 lines.append(t("session_help.codex_multi"))
             if "gemini" in providers:
+                lines.append(t("session_help.gemini_multi"))
+            if "kimi" in providers:
                 lines.append(t("session_help.gemini_multi"))
             lines.append(t("session_help.explicit"))
 

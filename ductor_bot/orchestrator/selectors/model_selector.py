@@ -8,7 +8,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ductor_bot.cli.auth import AuthStatus, check_all_auth
-from ductor_bot.config import CLAUDE_MODELS_ORDERED, get_gemini_models, update_config_file_async
+from ductor_bot.config import (
+    DEFAULT_KIMI_MODEL,
+    CLAUDE_MODELS_ORDERED,
+    get_gemini_models,
+    update_config_file_async,
+)
 from ductor_bot.i18n import t
 from ductor_bot.multiagent.registry import update_agent_fields
 from ductor_bot.orchestrator.selectors.models import Button, ButtonGrid, SelectorResponse
@@ -145,7 +150,11 @@ async def model_selector_start(
     are authenticated.
     """
     auth = await asyncio.to_thread(check_all_auth)
-    authed = [name for name, res in auth.items() if res.status == AuthStatus.AUTHENTICATED]
+    authed = [
+        name
+        for name, res in auth.items()
+        if res.status == AuthStatus.AUTHENTICATED and not orch.config.is_provider_disabled(name)
+    ]
 
     header = await _status_line(orch, key)
 
@@ -367,7 +376,7 @@ async def _build_model_step(
 
     if provider == "kimi":
         rows = [
-            [Button(text="kimi-auto", callback_data="ms:m:kimi-auto")],
+            [Button(text=DEFAULT_KIMI_MODEL, callback_data=f"ms:m:{DEFAULT_KIMI_MODEL}")],
             [Button(text="kimi-k2-0905-preview", callback_data="ms:m:kimi-k2-0905-preview")],
             [Button(text=t("model.btn_back"), callback_data="ms:b:root")],
         ]

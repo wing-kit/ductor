@@ -79,8 +79,10 @@ class TestLoadConfig:
 
         assert config.streaming.enabled is True
         assert config.gemini_api_key is None
+        assert config.disabled_providers == []
         merged = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
         assert merged["gemini_api_key"] == "null"
+        assert merged["disabled_providers"] == []
 
     def test_creates_default_config_when_no_example(self, tmp_path: Path) -> None:
         from ductor_bot.__main__ import load_config

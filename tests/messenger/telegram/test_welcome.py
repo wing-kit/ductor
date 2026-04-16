@@ -117,6 +117,7 @@ class TestBuildWelcomeText:
         assert "No CLI authenticated" in text
         assert "claude auth" in text
         assert "codex auth" in text
+        assert "authenticate in `kimi`" in text
 
     def test_empty_auth_results(self) -> None:
         from ductor_bot.messenger.telegram.welcome import build_welcome_text
@@ -218,6 +219,19 @@ class TestBuildAuthBlock:
 
         assert "Claude Code authenticated" in block
         assert "Sonnet" in block
+
+    def test_disabled_provider_is_hidden(self) -> None:
+        from ductor_bot.messenger.telegram.welcome import _build_auth_block
+
+        auth_results = {
+            "claude": _auth("claude"),
+            "gemini": _auth("gemini"),
+        }
+        cfg = _config(disabled_providers=["gemini"])
+        block = _build_auth_block(auth_results, cfg)
+
+        assert "Claude Code authenticated" in block
+        assert "Gemini" not in block
 
 
 # ---------------------------------------------------------------------------

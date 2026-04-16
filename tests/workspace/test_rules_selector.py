@@ -39,6 +39,7 @@ def mock_paths(tmp_path: Path) -> DuctorPaths:
     paths = MagicMock(spec=DuctorPaths)
     paths.home_defaults = home_defaults
     paths.ductor_home = ductor_home
+    paths.config_path = ductor_home / "config" / "config.json"
 
     return paths
 
@@ -499,3 +500,19 @@ def test_cleanup_removes_kimi_md_when_not_authenticated(mock_paths: DuctorPaths)
 
         assert not old_kimi.exists()
         assert (mock_paths.ductor_home / "config" / "CLAUDE.md").exists()
+
+
+def test_disabled_provider_is_excluded_from_rule_deploy(mock_paths: DuctorPaths) -> None:
+    """Providers in disabled_providers should not deploy rule files."""
+    mock_paths.config_path.parent.mkdir(parents=True, exist_ok=True)
+    mock_paths.config_path.write_text('{"disabled_providers":["gemini"]}', encoding="utf-8")
+    auth = {
+        "claude": AuthResult(provider="claude", status=AuthStatus.AUTHENTICATED),
+        "gemini": AuthResult(provider="gemini", status=AuthStatus.AUTHENTICATED),
+    }
+    with patch("ductor_bot.cli.auth.check_all_auth", return_value=auth):
+        selector = RulesSelector(mock_paths)
+        selector.deploy_rules()
+
+    assert (mock_paths.ductor_home / "config" / "CLAUDE.md").exists()
+    assert not (mock_paths.ductor_home / "config" / "GEMINI.md").exists()

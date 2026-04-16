@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator
 from functools import partial
 from pathlib import Path
 from shutil import which
 from typing import Any
-from uuid import uuid4
 
 from ductor_bot.cli.base import BaseCLI, CLIConfig, docker_wrap
 from ductor_bot.cli.executor import (
@@ -28,6 +28,7 @@ from ductor_bot.cli.stream_events import (
 from ductor_bot.cli.types import CLIResponse
 
 logger = logging.getLogger(__name__)
+_RESUME_SESSION_RE = re.compile(r"(?:--resume|-r)\s+([A-Za-z0-9._:-]+)")
 
 
 class _KimiStreamState:
@@ -75,27 +76,16 @@ class KimiCLI(BaseCLI):
             parts.append(cfg.append_system_prompt)
         return "\n\n".join(parts)
 
-    def _generate_session_id(self) -> str:
-        """Generate a deterministic-style session id for first-turn Kimi runs."""
-        topic = self._config.topic_id if self._config.topic_id is not None else 0
-        return f"ductor-{self._config.chat_id}-{topic}-{uuid4().hex}"
-
     def _build_command(
         self,
         prompt: str,
         *,
         resume_session: str | None,
         continue_session: bool,
-        streaming: bool,
     ) -> tuple[list[str], str | None]:
         """Build Kimi CLI command and effective session id."""
         cfg = self._config
         effective_session_id = resume_session
-        if effective_session_id is None and not continue_session:
-            # Kimi stream-json output does not reliably expose session IDs.
-            # We provide one so each ductor session can resume safely.
-            effective_session_id = self._generate_session_id()
-
         cmd = [self._cli, "--print", "--output-format", "stream-json"]
         if cfg.model:
             cmd += ["--model", cfg.model]
@@ -122,7 +112,6 @@ class KimiCLI(BaseCLI):
             prompt,
             resume_session=resume_session,
             continue_session=continue_session,
-            streaming=False,
         )
         exec_cmd, use_cwd = docker_wrap(cmd, self._config)
         _log_cmd(exec_cmd)
@@ -146,7 +135,6 @@ class KimiCLI(BaseCLI):
             prompt,
             resume_session=resume_session,
             continue_session=continue_session,
-            streaming=True,
         )
         exec_cmd, use_cwd = docker_wrap(cmd, self._config)
         _log_cmd(exec_cmd, streaming=True)
@@ -273,9 +261,10 @@ def _parse_response(
     """Parse Kimi subprocess output into a CLIResponse."""
     stderr_text = stderr.decode(errors="replace")[:2000] if stderr else ""
     raw = stdout.decode(errors="replace").strip()
+    hinted_session_id = _extract_resume_session_id(raw) or _extract_resume_session_id(stderr_text)
     if not raw:
         return CLIResponse(
-            session_id=fallback_session_id,
+            session_id=fallback_session_id or hinted_session_id,
             result=stderr_text[:500] if stderr_text else "",
             is_error=True,
             returncode=returncode,
@@ -283,7 +272,7 @@ def _parse_response(
         )
 
     text_parts: list[str] = []
-    discovered_session_id = fallback_session_id
+    discovered_session_id = fallback_session_id or hinted_session_id
     for line in raw.splitlines():
         try:
             data = json.loads(line)
@@ -318,22 +307,35 @@ def _kimi_final_result(
 ) -> ResultEvent:
     """Build final stream ResultEvent for Kimi."""
     stderr_text = result.stderr_bytes.decode(errors="replace")[:2000] if result.stderr_bytes else ""
+    discovered_session_id = (
+        session_id
+        or _extract_resume_session_id(stderr_text)
+        or _extract_resume_session_id("\n".join(accumulated_text))
+    )
     if result.process.returncode != 0:
         detail = stderr_text or "\n".join(accumulated_text) or "(no output)"
         return ResultEvent(
             type="result",
-            session_id=session_id,
+            session_id=discovered_session_id,
             result=detail[:500],
             is_error=True,
             returncode=result.process.returncode,
         )
     return ResultEvent(
         type="result",
-        session_id=session_id,
+        session_id=discovered_session_id,
         result="".join(accumulated_text),
         is_error=False,
         returncode=result.process.returncode,
     )
+
+
+def _extract_resume_session_id(text: str) -> str | None:
+    """Parse session ID from Kimi resume hint text, if present."""
+    match = _RESUME_SESSION_RE.search(text)
+    if not match:
+        return None
+    return match.group(1)
 
 
 def _log_cmd(cmd: list[str], *, streaming: bool = False) -> None:

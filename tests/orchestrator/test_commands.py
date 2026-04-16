@@ -97,6 +97,18 @@ async def test_status_with_session(orch: Orchestrator) -> None:
     assert "Messages:" in result.text
 
 
+async def test_status_hides_disabled_providers(orch: Orchestrator) -> None:
+    orch._config.disabled_providers = ["gemini"]
+    auth_map = {
+        "claude": AuthResult("claude", AuthStatus.AUTHENTICATED),
+        "gemini": AuthResult("gemini", AuthStatus.AUTHENTICATED),
+    }
+    with patch("ductor_bot.orchestrator.commands.check_all_auth", return_value=auth_map):
+        result = await cmd_status(orch, SessionKey(chat_id=1), "/status")
+    assert "[claude]" in result.text
+    assert "[gemini]" not in result.text
+
+
 async def test_status_prefers_session_model_over_config(orch: Orchestrator) -> None:
     await orch._sessions.resolve_session(
         SessionKey(chat_id=1), provider="codex", model="gpt-5.2-codex"

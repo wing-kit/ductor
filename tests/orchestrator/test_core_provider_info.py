@@ -6,15 +6,23 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ductor_bot.config import AgentConfig, reset_gemini_models, set_gemini_models
+from ductor_bot.config import (
+    AgentConfig,
+    DEFAULT_KIMI_MODEL,
+    reset_gemini_models,
+    reset_kimi_models,
+    set_gemini_models,
+)
 from ductor_bot.orchestrator.providers import ProviderManager
 
 
 @pytest.fixture(autouse=True)
 def _reset_gemini():
     reset_gemini_models()
+    reset_kimi_models()
     yield
     reset_gemini_models()
+    reset_kimi_models()
 
 
 def _make_provider_manager(
@@ -81,3 +89,8 @@ class TestBuildProviderInfo:
         pm, obs = _make_provider_manager(frozenset())
         info = pm.build_provider_info(obs)
         assert info == []
+
+    def test_kimi_models_include_default_when_runtime_cache_empty(self) -> None:
+        pm, obs = _make_provider_manager(frozenset({"kimi"}))
+        info = pm.build_provider_info(obs)
+        assert info[0]["models"] == [DEFAULT_KIMI_MODEL]

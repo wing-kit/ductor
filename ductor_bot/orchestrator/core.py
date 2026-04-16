@@ -614,6 +614,7 @@ class Orchestrator:
             for k in (
                 "model",
                 "provider",
+                "disabled_providers",
                 "max_turns",
                 "max_budget_usd",
                 "permission_mode",
@@ -641,6 +642,15 @@ class Orchestrator:
 
         if "model" in hot:
             self._providers.refresh_known_model_ids()
+        if "disabled_providers" in hot:
+            from ductor_bot.cli.auth import AuthStatus, check_all_auth
+
+            auth_results = check_all_auth()
+            self._providers.apply_auth_results(
+                auth_results,
+                auth_status_enum=AuthStatus,
+                cli_service=self._cli_service,
+            )
 
         if "language" in hot:
             from ductor_bot.i18n import init as init_i18n
