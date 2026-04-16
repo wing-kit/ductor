@@ -218,10 +218,26 @@ def _iter_tool_calls(data: dict[str, Any]) -> list[dict[str, Any]]:
                 {
                     "id": str(item.get("id", "")),
                     "name": str(fn.get("name", "")),
-                    "arguments": fn.get("arguments"),
+                    "arguments": _parse_tool_arguments(fn.get("arguments")),
                 }
             )
     return out
+
+
+def _parse_tool_arguments(value: object) -> dict[str, Any] | None:
+    """Normalize tool arguments: parse JSON string into dict if needed."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            logger.debug("Kimi unparseable tool arguments: %.200s", value)
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+        return None
+    return None
 
 
 def _extract_text_content(value: object) -> str:

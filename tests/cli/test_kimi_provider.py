@@ -105,6 +105,29 @@ def test_parse_kimi_stream_line_assistant_text_and_tool() -> None:
     )
 
 
+def test_parse_kimi_stream_line_assistant_tool_with_string_arguments() -> None:
+    line = json.dumps(
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "t2",
+                    "function": {
+                        "name": "Bash",
+                        "arguments": '{"command": "echo hi", "timeout": 60}',
+                    },
+                }
+            ],
+        }
+    )
+    events = parse_kimi_stream_line(line)
+    tool_events = [e for e in events if isinstance(e, ToolUseEvent)]
+    assert len(tool_events) == 1
+    assert tool_events[0].tool_name == "Bash"
+    assert tool_events[0].parameters == {"command": "echo hi", "timeout": 60}
+
+
 def test_parse_kimi_stream_line_tool_result() -> None:
     line = json.dumps({"role": "tool", "tool_call_id": "t1", "content": "done"})
     events = parse_kimi_stream_line(line)
