@@ -9,7 +9,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
@@ -41,6 +41,35 @@ class SendRichOpts(BaseSendOpts):
 logger = logging.getLogger(__name__)
 
 _PHOTO_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"})
+
+
+async def _with_telegram_retry(
+    fn: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Call an aiogram method with exponential backoff on TelegramNetworkError."""
+    retries: int = kwargs.pop("_retries", 3)
+    base_delay: float = kwargs.pop("_base_delay", 1.0)
+    last_exc: TelegramNetworkError | None = None
+    for attempt in range(retries):
+        try:
+            return await fn(*args, **kwargs)
+        except TelegramNetworkError as exc:
+            last_exc = exc
+            if attempt < retries - 1:
+                delay = base_delay * (2 ** attempt)
+                logger.warning(
+                    "Telegram network error on attempt %d/%d, retrying in %.1fs: %s",
+                    attempt + 1,
+                    retries,
+                    delay,
+                    exc,
+                )
+                await asyncio.sleep(delay)
+    if last_exc is None:
+        raise RuntimeError("Unexpected empty retry loop")
+    raise last_exc
 _VIDEO_SUFFIXES = frozenset({".mp4"})
 _AUDIO_SUFFIXES = frozenset({".mp3", ".m4a"})
 
@@ -139,7 +168,8 @@ async def _send_text_chunks(
     for i, chunk in enumerate(chunks):
         try:
             if reply_to_message_id and i == 0:
-                last_msg = await bot.send_message(
+                last_msg = await _with_telegram_retry(
+                    bot.send_message,
                     chat_id=chat_id,
                     text=chunk,
                     parse_mode=ParseMode.HTML,
@@ -150,7 +180,8 @@ async def _send_text_chunks(
                     message_thread_id=thread_id,
                 )
             else:
-                last_msg = await bot.send_message(
+                last_msg = await _with_telegram_retry(
+                    bot.send_message,
                     chat_id=chat_id,
                     text=chunk,
                     parse_mode=ParseMode.HTML,
@@ -208,7 +239,8 @@ async def send_rich(
 
     if button_markup is not None and last_msg is not None:
         try:
-            await bot.edit_message_reply_markup(
+            await _with_telegram_retry(
+                bot.edit_message_reply_markup,
                 chat_id=chat_id,
                 message_id=last_msg.message_id,
                 reply_markup=button_markup,
@@ -265,7 +297,8 @@ async def send_file(
     try:
         mime = guess_mime(path)
         upload_mode = _select_telegram_upload_mode(path, mime)
-        await _send_by_mode(
+        await _with_telegram_retry(
+            _send_by_mode,
             bot,
             chat_id,
             path,

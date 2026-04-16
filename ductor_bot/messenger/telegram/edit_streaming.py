@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter
 
 from ductor_bot.messenger.telegram.buttons import extract_buttons
 from ductor_bot.messenger.telegram.formatting import (
@@ -22,6 +22,7 @@ from ductor_bot.messenger.telegram.formatting import (
     markdown_to_telegram_html,
     split_html_message,
 )
+from ductor_bot.messenger.telegram.sender import _with_telegram_retry
 from ductor_bot.text.response_format import normalize_tool_name
 
 if TYPE_CHECKING:
@@ -298,9 +299,14 @@ class EditStreamEditor:
             return
         try:
             if self._s.messages_sent == 0 and self._reply_to is not None:
-                msg = await self._reply_to.answer(display, parse_mode=ParseMode.HTML)
+                msg = await _with_telegram_retry(
+                    self._reply_to.answer,
+                    display,
+                    parse_mode=ParseMode.HTML,
+                )
             else:
-                msg = await self._bot.send_message(
+                msg = await _with_telegram_retry(
+                    self._bot.send_message,
                     chat_id=self._chat_id,
                     text=display,
                     parse_mode=ParseMode.HTML,
@@ -312,11 +318,14 @@ class EditStreamEditor:
         except TelegramBadRequest:
             logger.warning("HTML create failed, falling back to plain text")
             await self._create_message_plain(display)
+        except TelegramNetworkError:
+            logger.warning("Network error creating message, giving up")
 
     async def _create_message_plain(self, text: str) -> None:
         """Fallback: send without HTML parse mode."""
         try:
-            msg = await self._bot.send_message(
+            msg = await _with_telegram_retry(
+                self._bot.send_message,
                 chat_id=self._chat_id,
                 text=text[:TELEGRAM_MSG_LIMIT],
                 parse_mode=None,
@@ -326,6 +335,8 @@ class EditStreamEditor:
             self._s.messages_sent += 1
         except TelegramBadRequest:
             logger.exception("Failed to send even as plain text")
+        except TelegramNetworkError:
+            logger.warning("Network error creating plain message, giving up")
 
     async def _edit_message(self, text: str) -> None:
         """Edit the active Telegram message with error handling."""
@@ -333,7 +344,8 @@ class EditStreamEditor:
             return
         display = text[:TELEGRAM_MSG_LIMIT]
         try:
-            await self._bot.edit_message_text(
+            await _with_telegram_retry(
+                self._bot.edit_message_text,
                 text=display,
                 chat_id=self._chat_id,
                 message_id=self._s.active_msg.message_id,
@@ -356,7 +368,8 @@ class EditStreamEditor:
         except TelegramRetryAfter as exc:
             await asyncio.sleep(exc.retry_after)
             try:
-                await self._bot.edit_message_text(
+                await _with_telegram_retry(
+                    self._bot.edit_message_text,
                     text=display,
                     chat_id=self._chat_id,
                     message_id=self._s.active_msg.message_id,
@@ -365,6 +378,16 @@ class EditStreamEditor:
                 self._s.consecutive_failures = 0
             except (TelegramBadRequest, TelegramRetryAfter):
                 logger.warning("Edit retry after rate-limit also failed")
+        except TelegramNetworkError:
+            self._s.consecutive_failures += 1
+            logger.warning(
+                "Edit failed (%d/%d) due to network error",
+                self._s.consecutive_failures,
+                self._max_failures,
+            )
+            if self._s.consecutive_failures >= self._max_failures:
+                logger.warning("Too many edit failures, falling back to append mode")
+                self._s.fallen_back = True
 
     # ------------------------------------------------------------------
     # Internal: button keyboard attachment
@@ -378,12 +401,13 @@ class EditStreamEditor:
         if markup is None:
             return
         try:
-            await self._bot.edit_message_reply_markup(
+            await _with_telegram_retry(
+                self._bot.edit_message_reply_markup,
                 chat_id=self._chat_id,
                 message_id=self._s.active_msg.message_id,
                 reply_markup=markup,
             )
-        except (TelegramBadRequest, TelegramRetryAfter):
+        except (TelegramBadRequest, TelegramRetryAfter, TelegramNetworkError):
             logger.warning("Failed to attach button keyboard")
 
     # ------------------------------------------------------------------
@@ -397,19 +421,26 @@ class EditStreamEditor:
             if not display.strip():
                 continue
             try:
-                await self._bot.send_message(
+                await _with_telegram_retry(
+                    self._bot.send_message,
                     chat_id=self._chat_id,
                     text=display,
                     parse_mode=ParseMode.HTML,
                     message_thread_id=self._thread_id,
                 )
             except TelegramBadRequest:
-                await self._bot.send_message(
-                    chat_id=self._chat_id,
-                    text=display,
-                    parse_mode=None,
-                    message_thread_id=self._thread_id,
-                )
+                try:
+                    await _with_telegram_retry(
+                        self._bot.send_message,
+                        chat_id=self._chat_id,
+                        text=display,
+                        parse_mode=None,
+                        message_thread_id=self._thread_id,
+                    )
+                except (TelegramBadRequest, TelegramNetworkError):
+                    logger.warning("Failed to send append-mode message")
+            except TelegramNetworkError:
+                logger.warning("Network error sending append-mode message")
             self._s.messages_sent += 1
 
 
