@@ -117,7 +117,7 @@ class TestBuildWelcomeText:
         assert "No CLI authenticated" in text
         assert "claude auth" in text
         assert "codex auth" in text
-        assert "KIMI_API_KEY" in text
+        assert "authenticate in `kimi`" in text
 
     def test_empty_auth_results(self) -> None:
         from ductor_bot.messenger.telegram.welcome import build_welcome_text

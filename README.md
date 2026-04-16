@@ -247,7 +247,7 @@ ductor checks each installed provider CLI independently at startup/onboarding.
 - **Claude**: `claude` available on PATH and authenticated via Claude Code CLI flow.
 - **Codex**: `codex` available on PATH and authenticated via Codex CLI flow.
 - **Gemini**: `gemini` available and authenticated via Gemini CLI flow.
-- **Kimi**: `kimi` available on PATH and `KIMI_API_KEY` present in environment.
+- **Kimi**: `kimi` available on PATH and authenticated in Kimi CLI (`/login`) or configured via API key.
 
 ### Telegram
 

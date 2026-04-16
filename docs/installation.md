@@ -8,7 +8,7 @@
    - Claude Code CLI: `npm install -g @anthropic-ai/claude-code && claude auth`
    - Codex CLI: `npm install -g @openai/codex && codex auth`
    - Gemini CLI: `npm install -g @google/gemini-cli` and authenticate in `gemini`
-   - Kimi CLI: install `kimi` and set `KIMI_API_KEY` in the bot runtime environment
+   - Kimi CLI: install `kimi` and authenticate in Kimi CLI (or set `KIMI_API_KEY`)
 4. One of these messaging transports:
    - **Telegram**: Bot token from [@BotFather](https://t.me/BotFather) + user ID from [@userinfobot](https://t.me/userinfobot)
    - **Matrix**: install Matrix support first (`ductor install matrix` or `pip install \"ductor[matrix]\"`), then provide homeserver URL, user ID, and password/access token
@@ -282,7 +282,7 @@ codex auth
 # or
 # authenticate in gemini CLI
 # or
-# export KIMI_API_KEY and ensure `kimi` is on PATH
+# authenticate in Kimi CLI (or export KIMI_API_KEY) and ensure `kimi` is on PATH
 ```
 
 ### Docker enabled but not running

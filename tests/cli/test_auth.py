@@ -493,3 +493,70 @@ def test_check_kimi_auth_authenticated(monkeypatch: pytest.MonkeyPatch) -> None:
     result = check_kimi_auth()
 
     assert result.status == AuthStatus.AUTHENTICATED
+
+
+def test_check_kimi_auth_authenticated_from_credentials_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ductor_bot.cli.auth as _auth_mod
+
+    monkeypatch.setattr(_auth_mod, "which", lambda _name: "/usr/bin/kimi")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    credentials_dir = tmp_path / ".kimi" / "credentials"
+    credentials_dir.mkdir(parents=True)
+    cred_file = credentials_dir / "kimi-code.json"
+    cred_file.write_text('{"access_token":"tok"}')
+
+    result = check_kimi_auth()
+
+    assert result.status == AuthStatus.AUTHENTICATED
+    assert result.auth_file == cred_file
+
+
+def test_check_kimi_auth_authenticated_from_config_toml_api_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ductor_bot.cli.auth as _auth_mod
+
+    monkeypatch.setattr(_auth_mod, "which", lambda _name: "/usr/bin/kimi")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    kimi_home = tmp_path / ".kimi"
+    kimi_home.mkdir(parents=True)
+    config_toml = kimi_home / "config.toml"
+    config_toml.write_text(
+        """
+[providers.kimi-for-coding]
+type = "kimi"
+api_key = "sk-kimi-test"
+""".strip()
+    )
+
+    result = check_kimi_auth()
+
+    assert result.status == AuthStatus.AUTHENTICATED
+    assert result.auth_file == config_toml
+
+
+def test_check_kimi_auth_respects_kimi_share_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ductor_bot.cli.auth as _auth_mod
+
+    monkeypatch.setattr(_auth_mod, "which", lambda _name: "/usr/bin/kimi")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    custom_share = tmp_path / "custom-kimi"
+    monkeypatch.setenv("KIMI_SHARE_DIR", str(custom_share))
+
+    credentials_dir = custom_share / "credentials"
+    credentials_dir.mkdir(parents=True)
+    cred_file = credentials_dir / "oauth-token.json"
+    cred_file.write_text('{"access_token":"tok"}')
+
+    result = check_kimi_auth()
+
+    assert result.status == AuthStatus.AUTHENTICATED
+    assert result.auth_file == cred_file
